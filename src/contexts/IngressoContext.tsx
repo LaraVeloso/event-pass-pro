@@ -10,6 +10,7 @@ export interface Ingresso {
   data_criacao: string;
   data_entrada: string | null;
   usuario_validador: string | null;
+  criado_por: string | null;
 }
 
 export type ValidacaoStatus = 'valido' | 'duplicado' | 'invalido';
@@ -50,11 +51,15 @@ export function IngressoProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const criarIngresso = async (nomeConvidado: string): Promise<Ingresso | null> => {
+    if (!user || user.tipo !== 'admin') {
+      throw new Error('Apenas administradores podem criar ingressos.');
+    }
+
     const id = crypto.randomUUID();
     const novoIngresso = {
       nome_convidado: nomeConvidado,
       qr_code: id,
-      criado_por: user?.id,
+      criado_por: user.id, // Salva quem criou
     };
 
     const { data, error } = await supabase
@@ -70,6 +75,7 @@ export function IngressoProvider({ children }: { children: ReactNode }) {
   };
 
   const validarIngresso = async (codigo: string): Promise<ResultadoValidacao> => {
+    // Busca por ID ou QR Code
     const { data: ingresso, error } = await supabase
       .from('ingressos')
       .select('*')
@@ -96,7 +102,7 @@ export function IngressoProvider({ children }: { children: ReactNode }) {
       .update({
         entrada_registrada: true,
         data_entrada: new Date().toISOString(),
-        usuario_validador: user?.id,
+        usuario_validador: user?.id, // Salva quem validou
       })
       .eq('id', ingresso.id)
       .select()

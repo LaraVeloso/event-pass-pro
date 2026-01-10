@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Button } from '@/components/ui/button';
 import { X, Camera, Loader2 } from 'lucide-react';
 
@@ -19,8 +19,8 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
 
     const startScanner = async () => {
       try {
-        // Pequeno delay para garantir que o elemento DOM esteja pronto
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Delay para garantir renderização do DOM
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         if (!isMounted) return;
 
@@ -28,22 +28,24 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
         scannerRef.current = scanner;
 
         const config = {
-          fps: 10,
+          fps: 15,
           qrbox: { width: 250, height: 250 },
           aspectRatio: 1.0,
+          formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
         };
 
+        // Tenta iniciar com a câmera traseira (environment)
         await scanner.start(
           { facingMode: "environment" },
           config,
           (decodedText) => {
             if (isMounted) {
               onScan(decodedText);
-              stopScanner();
+              // O stop é chamado pelo componente pai ou via cleanup
             }
           },
           () => {
-            // Falhas de leitura silenciosas
+            // Erros de leitura ignorados para não poluir o console
           }
         );
 
@@ -51,19 +53,8 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
       } catch (err) {
         console.error('Erro ao iniciar scanner:', err);
         if (isMounted) {
-          setError('Não foi possível acessar a câmera. Verifique se outra aba está usando a câmera ou as permissões do navegador.');
+          setError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
           setIsStarting(false);
-        }
-      }
-    };
-
-    const stopScanner = async () => {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        try {
-          await scannerRef.current.stop();
-          scannerRef.current = null;
-        } catch (err) {
-          console.error('Erro ao parar scanner:', err);
         }
       }
     };
@@ -72,13 +63,14 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
 
     return () => {
       isMounted = false;
-      stopScanner();
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        scannerRef.current.stop().catch(e => console.error("Erro ao parar scanner:", e));
+      }
     };
   }, [onScan]);
 
   return (
     <div className="fixed inset-0 bg-black z-[100] flex flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between p-4 bg-black/80 backdrop-blur-sm z-20">
         <div className="flex items-center gap-2 text-white">
           <Camera className="w-5 h-5 text-primary" />
@@ -89,7 +81,6 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
         </Button>
       </div>
 
-      {/* Camera View */}
       <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
         {isStarting && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-30">
@@ -108,13 +99,8 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
           </div>
         )}
 
-        {/* O container do scanner deve estar sempre no DOM para a biblioteca encontrá-lo */}
-        <div
-          id={containerId}
-          className="w-full h-full"
-        />
+        <div id={containerId} className="w-full h-full" />
 
-        {/* Overlay de mira */}
         {!isStarting && !error && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
             <div className="relative w-64 h-64">

@@ -16,7 +16,7 @@ export function LoginScreen() {
           <div>
             <CardTitle className="text-2xl font-bold">Sistema de Ingressos</CardTitle>
             <CardDescription className="mt-2">
-              Faça login para acessar o sistema
+              Uso Interno - Faça login para acessar
             </CardDescription>
           </div>
         </CardHeader>
@@ -24,6 +24,9 @@ export function LoginScreen() {
           <Auth
             supabaseClient={supabase}
             providers={[]}
+            // Desabilita a visualização de "Sign Up" e "Forgot Password" para controle estrito
+            view="sign_in"
+            showLinks={false}
             appearance={{
               theme: ThemeSupa,
               variables: {
@@ -46,6 +49,9 @@ export function LoginScreen() {
             }}
             theme="light"
           />
+          <p className="text-center text-xs text-muted-foreground mt-4">
+            Contate o administrador para obter acesso.
+          </p>
         </CardContent>
       </Card>
     </div>
