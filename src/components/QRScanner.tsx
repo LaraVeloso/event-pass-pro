@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Html5Qrcode, Html5QrcodeResult } from 'html5-qrcode';
+import React, { useState } from 'react';
+import { QrReader } from 'react-qr-scanner';
 import { Button } from '@/components/ui/button';
 import { X, Camera, Loader2 } from 'lucide-react';
 
@@ -10,65 +10,39 @@ interface QRScannerProps {
 
 export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [cameraActive, setCameraActive] = useState(true);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!cameraActive || !containerRef.current) return;
+  const handleScan = (result: any) => {
+    if (result?.text) {
+      console.log("QR Code detected:", result.text);
+      onScan(result.text);
+      setCameraActive(false);
+    }
+  };
 
-    const initializeScanner = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        // Create scanner instance
-        const html5QrCode = new Html5Qrcode("qr-reader");
-        scannerRef.current = html5QrCode;
-
-        const config = {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1,
-        };
-
-        // Start camera
-        await html5QrCode.start(
-          { facingMode: "environment" },
-          config,
-          (decodedText: string) => {
-            console.log("QR Code detected:", decodedText);
-            onScan(decodedText);
-            setCameraActive(false);
-          },
-          (errorMessage: string) => {
-            // Silently handle errors, as they occur frequently during scanning
-            console.debug("QR scan error:", errorMessage);
-          }
-        );
-
-        setIsLoading(false);
-      } catch (err) {
-        console.error('QR Scanner initialization error:', err);
-        setError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
-        setIsLoading(false);
-      }
-    };
-
-    initializeScanner();
-
-    return () => {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().catch(console.error);
-      }
-    };
-  }, [cameraActive, onScan]);
+  const handleError = (error: any) => {
+    console.error('QR Scanner error:', error);
+    if (error?.name === 'NotAllowedError') {
+      setError('Permissão da câmera negada. Por favor, permita o acesso à câmera nas configurações do navegador.');
+    } else if (error?.name === 'NotFoundError') {
+      setError('Nenhuma câmera encontrada. Verifique se seu dispositivo tem uma câmera.');
+    } else if (error?.name === 'NotSupportedError') {
+      setError('Câmera não suportada. Tente usar um navegador diferente.');
+    } else {
+      setError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
+    }
+  };
 
   const handleRetry = () => {
     setError(null);
     setCameraActive(true);
-    setIsLoading(true);
+  };
+
+  const constraints = {
+    facingMode: 'environment',
+    aspectRatio: 1,
+    width: { ideal: 1280 },
+    height: { ideal: 720 }
   };
 
   return (
@@ -83,7 +57,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
         </Button>
       </div>
 
-      <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden" ref={containerRef}>
+      <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
         {error ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-30 p-8 text-center">
             <Camera className="w-16 h-16 text-white/40 mb-4" />
@@ -97,18 +71,34 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
               </Button>
             </div>
           </div>
-        ) : isLoading ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-30">
-            <Loader2 className="w-16 h-16 text-primary animate-spin mb-4" />
-            <p className="text-white text-lg mb-2">Iniciando câmera...</p>
-            <p className="text-white/60 text-sm">Aguarde um momento</p>
-          </div>
         ) : (
           <>
             <div className="w-full h-full">
               {cameraActive && (
                 <div className="relative w-full h-full">
-                  <div id="qr-reader" className="w-full h-full" />
+                  <QrReader
+                    onResult={handleScan}
+                    constraints={constraints}
+                    style={{ 
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover'
+                    }}
+                    videoStyle={{ 
+                      objectFit: 'cover',
+                      width: '100%',
+                      height: '100%'
+                    }}
+                    videoConstraints={{
+                      facingMode: 'environment',
+                      aspectRatio: 1,
+                      width: { ideal: 1280 },
+                      height: { ideal: 720 }
+                    }}
+                  />
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="relative w-64 h-64">
                       <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-primary rounded-tl-lg" />
