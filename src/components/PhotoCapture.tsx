@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, Camera, RotateCcw, Loader2, Upload, AlertCircle } from 'lucide-react';
-import jsQR from 'jsqr';
+import { BrowserQRCodeReader, DecodeHintType } from '@zxing/library';
 
 interface PhotoCaptureProps {
   onCapture: (code: string) => void;
@@ -15,7 +15,6 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
   const [decodedCode, setDecodedCode] = useState<string | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -35,7 +34,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
-          width: { ideal: 1920 }, // Aumentando a resolução ideal para melhor captura
+          width: { ideal: 1920 },
           height: { ideal: 1080 }
         }
       });
@@ -52,78 +51,95 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     }
   }, [stopCamera]);
 
-  const processImage = (imageDataUrl: string) => {
+  const processImage = async (imageDataUrl: string) => {
     setIsProcessing(true);
     setError(null);
 
     const img = new Image();
     img.crossOrigin = "Anonymous";
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-      if (!context) return;
+    
+    img.onload = async () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) throw new Error('Canvas não disponível');
 
-      // Redimensionar para um tamanho gerenciável mas nítido
-      const maxDim = 1024;
-      let width = img.width;
-      let height = img.height;
-      
-      if (width > height) {
-        if (width > maxDim) {
+        // Redimensionar mantendo aspect ratio
+        const maxDim = 1200;
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > height && width > maxDim) {
           height *= maxDim / width;
           width = maxDim;
-        }
-      } else {
-        if (height > maxDim) {
+        } else if (height > maxDim) {
           width *= maxDim / height;
           height = maxDim;
         }
-      }
 
-      canvas.width = width;
-      canvas.height = height;
-      context.drawImage(img, 0, 0, width, height);
+        canvas.width = width;
+        canvas.height = height;
+        context.drawImage(img, 0, 0, width, height);
 
-      const imageData = context.getImageData(0, 0, width, height);
-      
-      // Tentar decodificar
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "dontInvert",
-      });
+        // Configurar hints para melhor detecção
+        const hints = new Map();
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [0]); // 0 é o enum para QR_CODE no ZXing
+        hints.set(DecodeHintType.PURE_BARCODE, false);
 
-      if (code && code.data) {
-        setDecodedCode(code.data);
-        setPhotoTaken(imageDataUrl);
-      } else {
-        // Segunda tentativa: Tentar com inversão (para QR codes em fundos escuros)
-        const codeInverted = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "attemptBoth",
-        });
+        // Criar reader
+        const reader = new BrowserQRCodeReader(hints);
         
-        if (codeInverted && codeInverted.data) {
-          setDecodedCode(codeInverted.data);
+        // Tentar decodificar
+        const result = await reader.decodeFromCanvas(canvas);
+        
+        if (result && result.getText()) {
+          setDecodedCode(result.getText());
           setPhotoTaken(imageDataUrl);
         } else {
-          setError("QR Code não detectado. Certifique-se que o código está nítido e bem iluminado.");
-          setPhotoTaken(imageDataUrl);
+          throw new Error('QR Code não detectado');
         }
+        
+      } catch (err) {
+        console.error('Erro ao decodificar:', err);
+        setError(
+          "QR Code não detectado. Certifique-se que:\n" +
+          "• O código está nítido e completo\n" +
+          "• Há boa iluminação\n" +
+          "• O código ocupa boa parte da foto\n" +
+          "• Tente tirar a foto mais de perto"
+        );
+        setPhotoTaken(imageDataUrl);
+      } finally {
+        setIsProcessing(false);
       }
+    };
+    
+    img.onerror = () => {
+      setError('Erro ao carregar a imagem');
       setIsProcessing(false);
     };
+    
     img.src = imageDataUrl;
   };
 
   const capturePhoto = useCallback(() => {
     if (videoRef.current) {
       const video = videoRef.current;
+      
+      // Usar resolução MÁXIMA possível
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       
       if (context && video.readyState === 4) {
+        // Aplicar sharpening e contraste antes de salvar para ajudar o ZXing
+        context.filter = 'contrast(1.2) brightness(1.1)';
         context.drawImage(video, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        
+        // Usar qualidade MÁXIMA
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.98);
         stopCamera();
         processImage(dataUrl);
       }
@@ -181,7 +197,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
                   Código Identificado!
                 </div>
               ) : !isProcessing && (
-                <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded-lg flex items-start gap-2 text-sm">
+                <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded-lg flex items-start gap-2 text-sm whitespace-pre-line">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </div>
