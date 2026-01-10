@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, Camera, RotateCcw, Loader2, Upload, AlertCircle } from 'lucide-react';
-import { BrowserQRCodeReader, DecodeHintType } from '@zxing/library';
+import { BrowserQRCodeReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
 interface PhotoCaptureProps {
   onCapture: (code: string) => void;
@@ -17,6 +17,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const readerRef = useRef<BrowserQRCodeReader>(new BrowserQRCodeReader());
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -57,42 +58,39 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     setError(null);
     setPhotoTaken(imageDataUrl);
 
+    // Criar um elemento de imagem temporário para o ZXing
     const img = new Image();
     img.src = imageDataUrl;
     
     img.onload = async () => {
       try {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('Canvas context error');
-
-        // Usar dimensões originais para prints digitais
-        canvas.width = img.width;
-        canvas.height = img.height;
-        context.drawImage(img, 0, 0);
-
         const hints = new Map();
         hints.set(DecodeHintType.TRY_HARDER, true);
-        // Removido restrição de formato para ser mais flexível
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
         
         const reader = new BrowserQRCodeReader(hints);
-        const result = await reader.decodeFromCanvas(canvas);
         
-        if (result && result.getText()) {
+        // O ZXing possui um método específico para decodificar de um elemento de imagem
+        const result = await reader.decodeFromImageElement(img);
+        
+        if (result) {
           const code = result.getText();
-          console.log('[PhotoCapture] Success:', code);
+          console.log('[PhotoCapture] QR Code detectado:', code);
           setDecodedCode(code);
-          // Validação automática ao detectar
-          setTimeout(() => onCapture(code), 500);
-        } else {
-          throw new Error('No code found');
+          // Pequeno delay visual antes de fechar e validar
+          setTimeout(() => onCapture(code), 800);
         }
       } catch (err) {
-        console.error('[PhotoCapture] Error:', err);
-        setError("Não conseguimos ler este QR Code. Tente aproximar mais ou garantir que o código não esteja cortado.");
+        console.error('[PhotoCapture] Erro na decodificação:', err);
+        setError("Não foi possível encontrar um QR Code nesta imagem. Tente aproximar mais ou usar um print mais centralizado.");
       } finally {
         setIsProcessing(false);
       }
+    };
+
+    img.onerror = () => {
+      setError("Erro ao carregar a imagem.");
+      setIsProcessing(false);
     };
   };
 
@@ -106,7 +104,8 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       
       if (context && video.readyState === 4) {
         context.drawImage(video, 0, 0);
-        const dataUrl = canvas.toDataURL('image/png'); // PNG é melhor para preservar bordas de QR
+        // Usar JPEG com alta qualidade para fotos de câmera
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
         stopCamera();
         processImage(dataUrl);
       }
@@ -150,13 +149,13 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
               <img 
                 src={photoTaken} 
                 alt="Captura" 
-                className={`rounded-lg shadow-2xl object-contain ${decodedCode ? 'border-4 border-green-500' : ''}`}
+                className={`rounded-lg shadow-2xl object-contain transition-all ${decodedCode ? 'border-4 border-green-500 scale-[1.02]' : ''}`}
               />
               {isProcessing && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg">
                   <div className="flex flex-col items-center gap-3">
                     <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                    <span className="text-white font-medium">Lendo QR Code...</span>
+                    <span className="text-white font-medium">Processando...</span>
                   </div>
                 </div>
               )}
@@ -164,8 +163,8 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
             
             <div className="mt-6 w-full max-w-xs space-y-4">
               {decodedCode ? (
-                <div className="bg-green-500 text-white p-4 rounded-lg text-center font-bold animate-bounce">
-                  QR CODE DETECTADO!
+                <div className="bg-green-500 text-white p-4 rounded-lg text-center font-bold shadow-lg">
+                  QR CODE IDENTIFICADO!
                 </div>
               ) : !isProcessing && error && (
                 <div className="bg-red-500/20 border border-red-500 text-red-400 p-4 rounded-lg flex items-start gap-2 text-sm">
@@ -179,11 +178,9 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
                   <Button onClick={() => { setPhotoTaken(null); startCamera(); }} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10">
                     <RotateCcw className="w-4 h-4 mr-2" /> Tentar Outra
                   </Button>
-                  <label className="flex-1">
-                    <Button variant="secondary" className="w-full" onClick={() => fileInputRef.current?.click()}>
-                      <Upload className="w-4 h-4 mr-2" /> Anexar
-                    </Button>
-                  </label>
+                  <Button variant="secondary" className="flex-1" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="w-4 h-4 mr-2" /> Anexar
+                  </Button>
                 </div>
               )}
             </div>
@@ -206,9 +203,12 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
                 <Button variant="outline" size="icon" className="w-12 h-12 rounded-full border-white/30 text-white bg-black/20" onClick={() => fileInputRef.current?.click()}>
                   <Upload className="w-5 h-5" />
                 </Button>
-                <Button onClick={capturePhoto} className="w-20 h-20 rounded-full bg-white hover:bg-gray-200 text-black shadow-xl" />
+                <Button onClick={capturePhoto} className="w-20 h-20 rounded-full bg-white hover:bg-gray-200 text-black shadow-xl flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-full border-4 border-black/5" />
+                </Button>
                 <div className="w-12" />
               </div>
+              <p className="text-white/60 text-xs uppercase tracking-widest">Aponte para o QR Code</p>
             </div>
           </>
         )}
