@@ -29,6 +29,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     stopCamera();
     setError(null);
     setDecodedCode(null);
+    setPhotoTaken(null);
     
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -46,7 +47,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
         await videoRef.current.play();
       }
     } catch (err: any) {
-      console.error('Camera error:', err);
+      console.error('[PhotoCapture] Camera error:', err);
       setError('Não foi possível acessar a câmera. Tente anexar uma foto.');
     }
   }, [stopCamera]);
@@ -54,6 +55,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
   const processImage = async (imageDataUrl: string) => {
     setIsProcessing(true);
     setError(null);
+    setPhotoTaken(imageDataUrl);
 
     const img = new Image();
     img.crossOrigin = "Anonymous";
@@ -64,7 +66,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
         const context = canvas.getContext('2d', { willReadFrequently: true });
         if (!context) throw new Error('Canvas não disponível');
 
-        // Redimensionar mantendo aspect ratio
+        // Redimensionar para garantir que o QR code seja legível mas não pesado demais
         const maxDim = 1200;
         let width = img.width;
         let height = img.height;
@@ -79,37 +81,33 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
 
         canvas.width = width;
         canvas.height = height;
+        
+        // Aplicar melhorias de imagem no canvas
+        context.filter = 'contrast(1.2) brightness(1.05)';
         context.drawImage(img, 0, 0, width, height);
 
-        // Configurar hints para melhor detecção
+        // Configurar hints para o ZXing
         const hints = new Map();
         hints.set(DecodeHintType.TRY_HARDER, true);
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [0]); // 0 é o enum para QR_CODE no ZXing
-        hints.set(DecodeHintType.PURE_BARCODE, false);
-
-        // Criar reader
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [0]); // QR_CODE
+        
         const reader = new BrowserQRCodeReader(hints);
         
-        // Tentar decodificar
+        // Tentar decodificar diretamente do canvas
         const result = await reader.decodeFromCanvas(canvas);
         
         if (result && result.getText()) {
+          console.log('[PhotoCapture] QR Code detected:', result.getText());
           setDecodedCode(result.getText());
-          setPhotoTaken(imageDataUrl);
         } else {
           throw new Error('QR Code não detectado');
         }
         
       } catch (err) {
-        console.error('Erro ao decodificar:', err);
+        console.error('[PhotoCapture] Decoding error:', err);
         setError(
-          "QR Code não detectado. Certifique-se que:\n" +
-          "• O código está nítido e completo\n" +
-          "• Há boa iluminação\n" +
-          "• O código ocupa boa parte da foto\n" +
-          "• Tente tirar a foto mais de perto"
+          "QR Code não detectado. Certifique-se que o código está nítido, bem iluminado e centralizado."
         );
-        setPhotoTaken(imageDataUrl);
       } finally {
         setIsProcessing(false);
       }
@@ -126,20 +124,14 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
   const capturePhoto = useCallback(() => {
     if (videoRef.current) {
       const video = videoRef.current;
-      
-      // Usar resolução MÁXIMA possível
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       
       if (context && video.readyState === 4) {
-        // Aplicar sharpening e contraste antes de salvar para ajudar o ZXing
-        context.filter = 'contrast(1.2) brightness(1.1)';
         context.drawImage(video, 0, 0);
-        
-        // Usar qualidade MÁXIMA
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.98);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
         stopCamera();
         processImage(dataUrl);
       }
@@ -182,11 +174,14 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
               <img 
                 src={photoTaken} 
                 alt="Captura" 
-                className={`rounded-lg shadow-2xl object-contain ${!decodedCode ? 'opacity-60 grayscale' : ''}`}
+                className={`rounded-lg shadow-2xl object-contain ${!decodedCode && !isProcessing ? 'opacity-60 grayscale' : ''}`}
               />
               {isProcessing && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
-                  <Loader2 className="w-10 h-10 text-white animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-10 h-10 text-white animate-spin" />
+                    <span className="text-white text-sm font-medium">Analisando...</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -196,8 +191,8 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
                 <div className="bg-green-500/20 border border-green-500 text-green-400 p-3 rounded-lg text-center font-medium">
                   Código Identificado!
                 </div>
-              ) : !isProcessing && (
-                <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded-lg flex items-start gap-2 text-sm whitespace-pre-line">
+              ) : !isProcessing && error && (
+                <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded-lg flex items-start gap-2 text-sm">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </div>
@@ -207,7 +202,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
                 <Button onClick={() => { setPhotoTaken(null); startCamera(); }} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10">
                   <RotateCcw className="w-4 h-4 mr-2" /> Tentar Outra
                 </Button>
-                {decodedCode && (
+                {decodedCode && !isProcessing && (
                   <Button onClick={() => onCapture(decodedCode)} className="flex-1 bg-primary hover:bg-primary/90">
                     Validar Agora
                   </Button>
