@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { QrScanner } from 'react-qr-scanner';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { Button } from '@/components/ui/button';
 import { X, Camera, Loader2 } from 'lucide-react';
 
@@ -11,29 +11,57 @@ interface QRScannerProps {
 export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [error, setError] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(true);
+  const scannerRef = React.useRef<Html5QrcodeScanner | null>(null);
 
-  const handleScan = (result: any) => {
-    if (result?.text) {
-      onScan(result.text);
-      setCameraActive(false); // Pause camera after successful scan
+  React.useEffect(() => {
+    if (!cameraActive) return;
+
+    const config = {
+      fps: 10,
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1,
+    };
+
+    const qrCodeSuccessCallback = (decodedText: string) => {
+      onScan(decodedText);
+      setCameraActive(false);
+      if (scannerRef.current) {
+        scannerRef.current.clear();
+      }
+    };
+
+    const qrCodeErrorCallback = (errorMessage: string) => {
+      // Silently handle errors, as they occur frequently during scanning
+    };
+
+    try {
+      const html5QrcodeScanner = new Html5QrcodeScanner(
+        "qr-reader",
+        config,
+        false
+      );
+      
+      html5QrcodeScanner.render(
+        qrCodeSuccessCallback,
+        qrCodeErrorCallback
+      );
+      
+      scannerRef.current = html5QrcodeScanner;
+    } catch (err) {
+      console.error('QR Scanner error:', err);
+      setError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
     }
-  };
 
-  const handleError = (err: any) => {
-    console.error('QR Scanner error:', err);
-    setError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
-  };
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.clear();
+      }
+    };
+  }, [cameraActive, onScan]);
 
   const handleRetry = () => {
     setError(null);
     setCameraActive(true);
-  };
-
-  const constraints = {
-    facingMode: 'environment', // Prefer back camera
-    aspectRatio: 1,
-    width: { ideal: 1280 },
-    height: { ideal: 720 }
   };
 
   return (
@@ -66,34 +94,18 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
           <>
             <div className="w-full h-full">
               {cameraActive && (
-                <QrScanner
-                  onScan={handleScan}
-                  onError={handleError}
-                  constraints={constraints}
-                  style={{ width: '100%', height: '100%' }}
-                  videoStyle={{ 
-                    objectFit: 'cover',
-                    width: '100%',
-                    height: '100%'
-                  }}
-                  videoConstraints={{
-                    facingMode: 'environment',
-                    aspectRatio: 1,
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                  }}
-                  ViewFinder={() => (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="relative w-64 h-64">
-                        <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-primary rounded-tl-lg" />
-                        <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-primary rounded-tr-lg" />
-                        <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-primary rounded-bl-lg" />
-                        <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-primary rounded-br-lg" />
-                        <div className="absolute left-0 right-0 h-0.5 bg-primary/50 animate-pulse top-1/2" />
-                      </div>
+                <div className="relative w-full h-full">
+                  <div id="qr-reader" className="w-full h-full" />
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="relative w-64 h-64">
+                      <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-primary rounded-tl-lg" />
+                      <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-primary rounded-tr-lg" />
+                      <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-primary rounded-bl-lg" />
+                      <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-primary rounded-br-lg" />
+                      <div className="absolute left-0 right-0 h-0.5 bg-primary/50 animate-pulse top-1/2" />
                     </div>
-                  )}
-                />
+                  </div>
+                </div>
               )}
             </div>
 
