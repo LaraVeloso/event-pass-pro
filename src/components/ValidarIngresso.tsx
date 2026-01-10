@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useIngressos, ResultadoValidacao as ResultadoType } from '@/contexts/IngressoContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +14,6 @@ export function ValidarIngresso() {
   const [isLoading, setIsLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [resultado, setResultado] = useState<ResultadoType | null>(null);
-  const { user } = useAuth();
   const { validarIngresso } = useIngressos();
   const { toast } = useToast();
 
@@ -32,13 +30,19 @@ export function ValidarIngresso() {
     setIsLoading(true);
     setShowScanner(false);
 
-    // Simular delay para UX
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const result = validarIngresso(codigo.trim(), user?.id || '');
-    setResultado(result);
-    setCodigoManual('');
-    setIsLoading(false);
+    try {
+      const result = await validarIngresso(codigo.trim());
+      setResultado(result);
+      setCodigoManual('');
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Ocorreu um erro ao validar o ingresso.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -79,7 +83,6 @@ export function ValidarIngresso() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Scanner Button */}
           <Button
             onClick={() => setShowScanner(true)}
             className="w-full h-24 text-lg"
@@ -99,7 +102,6 @@ export function ValidarIngresso() {
             </div>
           </div>
 
-          {/* Manual Input */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="codigo">Código do Ingresso</Label>

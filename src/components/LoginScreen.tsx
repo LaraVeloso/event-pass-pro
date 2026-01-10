@@ -1,36 +1,11 @@
-import React, { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import React from 'react';
+import { Auth } from '@supabase/auth-ui-react';
+import { ThemeSupa } from '@supabase/auth-ui-shared';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Ticket, Loader2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { Ticket } from 'lucide-react';
 
 export function LoginScreen() {
-  const [usuario, setUsuario] = useState('');
-  const [senha, setSenha] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
-  const { toast } = useToast();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    const success = await login(usuario, senha);
-
-    if (!success) {
-      toast({
-        title: 'Erro de autenticação',
-        description: 'Usuário ou senha incorretos.',
-        variant: 'destructive',
-      });
-    }
-
-    setIsLoading(false);
-  };
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md border-border/50 bg-card/80 backdrop-blur-sm">
@@ -46,48 +21,31 @@ export function LoginScreen() {
           </div>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="usuario">Usuário</Label>
-              <Input
-                id="usuario"
-                type="text"
-                value={usuario}
-                onChange={(e) => setUsuario(e.target.value)}
-                placeholder="Digite seu usuário"
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="senha">Senha</Label>
-              <Input
-                id="senha"
-                type="password"
-                value={senha}
-                onChange={(e) => setSenha(e.target.value)}
-                placeholder="Digite sua senha"
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Entrando...
-                </>
-              ) : (
-                'Entrar'
-              )}
-            </Button>
-          </form>
-          
-          <div className="mt-6 p-4 bg-muted/50 rounded-lg text-sm text-muted-foreground">
-            <p className="font-medium mb-2">Credenciais de teste:</p>
-            <p><span className="text-foreground">Admin:</span> admin / admin123</p>
-            <p><span className="text-foreground">Segurança:</span> seguranca / seguranca123</p>
-          </div>
+          <Auth
+            supabaseClient={supabase}
+            providers={[]}
+            appearance={{
+              theme: ThemeSupa,
+              variables: {
+                default: {
+                  colors: {
+                    brand: 'hsl(var(--primary))',
+                    brandButtonText: 'white',
+                  },
+                },
+              },
+            }}
+            localization={{
+              variables: {
+                sign_in: {
+                  email_label: 'E-mail',
+                  password_label: 'Senha',
+                  button_label: 'Entrar',
+                },
+              },
+            }}
+            theme="light"
+          />
         </CardContent>
       </Card>
     </div>

@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from './AuthContext';
 
 export interface Ingresso {
   id: string;
@@ -20,58 +22,61 @@ export interface ResultadoValidacao {
 
 interface IngressoContextType {
   ingressos: Ingresso[];
-  criarIngresso: (nomeConvidado: string) => Ingresso;
-  validarIngresso: (id: string, validadorId: string) => ResultadoValidacao;
-  buscarIngresso: (id: string) => Ingresso | undefined;
+  criarIngresso: (nomeConvidado: string) => Promise<Ingresso | null>;
+  validarIngresso: (id: string) => Promise<ResultadoValidacao>;
+  buscarIngresso: (id: string) => Promise<Ingresso | null>;
+  refreshIngressos: () => Promise<void>;
 }
 
 const IngressoContext = createContext<IngressoContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'ticketSystem_ingressos';
-
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-
 export function IngressoProvider({ children }: { children: ReactNode }) {
   const [ingressos, setIngressos] = useState<Ingresso[]>([]);
+  const { user } = useAuth();
+
+  const refreshIngressos = async () => {
+    const { data, error } = await supabase
+      .from('ingressos')
+      .select('*')
+      .order('data_criacao', { ascending: false });
+
+    if (!error && data) {
+      setIngressos(data as Ingresso[]);
+    }
+  };
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      setIngressos(JSON.parse(saved));
-    }
-  }, []);
+    if (user) refreshIngressos();
+  }, [user]);
 
-  const saveIngressos = (newIngressos: Ingresso[]) => {
-    setIngressos(newIngressos);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newIngressos));
-  };
-
-  const criarIngresso = (nomeConvidado: string): Ingresso => {
-    const id = generateUUID();
-    const novoIngresso: Ingresso = {
-      id,
+  const criarIngresso = async (nomeConvidado: string): Promise<Ingresso | null> => {
+    const id = crypto.randomUUID();
+    const novoIngresso = {
       nome_convidado: nomeConvidado,
       qr_code: id,
-      entrada_registrada: false,
-      data_criacao: new Date().toISOString(),
-      data_entrada: null,
-      usuario_validador: null,
+      criado_por: user?.id,
     };
 
-    saveIngressos([...ingressos, novoIngresso]);
-    return novoIngresso;
+    const { data, error } = await supabase
+      .from('ingressos')
+      .insert([novoIngresso])
+      .select()
+      .single();
+
+    if (error) throw error;
+    
+    await refreshIngressos();
+    return data as Ingresso;
   };
 
-  const validarIngresso = (id: string, validadorId: string): ResultadoValidacao => {
-    const ingresso = ingressos.find(i => i.id === id || i.qr_code === id);
+  const validarIngresso = async (codigo: string): Promise<ResultadoValidacao> => {
+    const { data: ingresso, error } = await supabase
+      .from('ingressos')
+      .select('*')
+      .or(`id.eq.${codigo},qr_code.eq.${codigo}`)
+      .maybeSingle();
 
-    if (!ingresso) {
+    if (error || !ingresso) {
       return {
         status: 'invalido',
         mensagem: 'Ingresso não encontrado no sistema.',
@@ -81,39 +86,44 @@ export function IngressoProvider({ children }: { children: ReactNode }) {
     if (ingresso.entrada_registrada) {
       return {
         status: 'duplicado',
-        ingresso,
+        ingresso: ingresso as Ingresso,
         mensagem: `Entrada já registrada em ${new Date(ingresso.data_entrada!).toLocaleString('pt-BR')}`,
       };
     }
 
-    // Registrar entrada
-    const updatedIngressos = ingressos.map(i => {
-      if (i.id === ingresso.id) {
-        return {
-          ...i,
-          entrada_registrada: true,
-          data_entrada: new Date().toISOString(),
-          usuario_validador: validadorId,
-        };
-      }
-      return i;
-    });
+    const { data: updated, error: updateError } = await supabase
+      .from('ingressos')
+      .update({
+        entrada_registrada: true,
+        data_entrada: new Date().toISOString(),
+        usuario_validador: user?.id,
+      })
+      .eq('id', ingresso.id)
+      .select()
+      .single();
 
-    saveIngressos(updatedIngressos);
+    if (updateError) throw updateError;
+
+    await refreshIngressos();
 
     return {
       status: 'valido',
-      ingresso: { ...ingresso, entrada_registrada: true, data_entrada: new Date().toISOString() },
+      ingresso: updated as Ingresso,
       mensagem: 'Entrada autorizada com sucesso!',
     };
   };
 
-  const buscarIngresso = (id: string): Ingresso | undefined => {
-    return ingressos.find(i => i.id === id || i.qr_code === id);
+  const buscarIngresso = async (id: string): Promise<Ingresso | null> => {
+    const { data } = await supabase
+      .from('ingressos')
+      .select('*')
+      .or(`id.eq.${id},qr_code.eq.${id}`)
+      .maybeSingle();
+    return data as Ingresso;
   };
 
   return (
-    <IngressoContext.Provider value={{ ingressos, criarIngresso, validarIngresso, buscarIngresso }}>
+    <IngressoContext.Provider value={{ ingressos, criarIngresso, validarIngresso, buscarIngresso, refreshIngressos }}>
       {children}
     </IngressoContext.Provider>
   );

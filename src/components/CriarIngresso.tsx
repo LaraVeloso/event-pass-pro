@@ -29,19 +29,25 @@ export function CriarIngresso() {
 
     setIsLoading(true);
 
-    // Simular delay para UX
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const ingresso = criarIngresso(nomeConvidado.trim());
-    setIngressoCriado(ingresso);
-    setNomeConvidado('');
-    
-    toast({
-      title: 'Ingresso criado!',
-      description: `Ingresso para ${ingresso.nome_convidado} gerado com sucesso.`,
-    });
-
-    setIsLoading(false);
+    try {
+      const ingresso = await criarIngresso(nomeConvidado.trim());
+      if (ingresso) {
+        setIngressoCriado(ingresso);
+        setNomeConvidado('');
+        toast({
+          title: 'Ingresso criado!',
+          description: `Ingresso para ${ingresso.nome_convidado} gerado com sucesso.`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível criar o ingresso.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleNovo = () => {

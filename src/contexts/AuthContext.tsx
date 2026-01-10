@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { User as SupabaseUser } from '@supabase/supabase-js';
 
 export type UserType = 'admin' | 'seguranca';
 
@@ -10,53 +12,60 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (usuario: string, senha: string) => Promise<boolean>;
-  logout: () => void;
+  supabaseUser: SupabaseUser | null;
+  logout: () => Promise<void>;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Usuários padrão para demonstração
-const DEFAULT_USERS = [
-  { id: '1', usuario: 'admin', senha: 'admin123', tipo: 'admin' as UserType },
-  { id: '2', usuario: 'seguranca', senha: 'seguranca123', tipo: 'seguranca' as UserType },
-];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Verificar sessão salva
-    const savedUser = localStorage.getItem('ticketSystem_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setIsLoading(false);
+    const getProfile = async (sessionUser: SupabaseUser) => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, usuario, tipo')
+        .eq('id', sessionUser.id)
+        .single();
+
+      if (!error && data) {
+        setUser(data as User);
+      }
+      setIsLoading(false);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSupabaseUser(session?.user ?? null);
+      if (session?.user) {
+        getProfile(session.user);
+      } else {
+        setIsLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSupabaseUser(session?.user ?? null);
+      if (session?.user) {
+        getProfile(session.user);
+      } else {
+        setUser(null);
+        setIsLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (usuario: string, senha: string): Promise<boolean> => {
-    const foundUser = DEFAULT_USERS.find(
-      u => u.usuario === usuario && u.senha === senha
-    );
-
-    if (foundUser) {
-      const { senha: _, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
-      localStorage.setItem('ticketSystem_user', JSON.stringify(userWithoutPassword));
-      return true;
-    }
-    return false;
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('ticketSystem_user');
+  const logout = async () => {
+    await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, supabaseUser, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
