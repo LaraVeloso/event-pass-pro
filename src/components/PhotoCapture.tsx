@@ -1,16 +1,19 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { X, Camera, RotateCcw, Loader2, Upload } from 'lucide-react';
+import { X, Camera, RotateCcw, Loader2, Upload, AlertCircle } from 'lucide-react';
+import jsQR from 'jsqr';
 
 interface PhotoCaptureProps {
-  onCapture: (photoDataUrl: string) => void;
+  onCapture: (code: string) => void;
   onClose: () => void;
 }
 
 export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
   const [error, setError] = useState<string | null>(null);
-  const [isCapturing, setIsCapturing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [photoTaken, setPhotoTaken] = useState<string | null>(null);
+  const [decodedCode, setDecodedCode] = useState<string | null>(null);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,6 +29,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
   const startCamera = useCallback(async () => {
     stopCamera();
     setError(null);
+    setDecodedCode(null);
     
     try {
       const constraints = {
@@ -42,23 +46,48 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        // Importante para iOS e navegadores modernos
         videoRef.current.setAttribute('playsinline', 'true');
-        try {
-          await videoRef.current.play();
-        } catch (playErr) {
-          console.error("Erro ao dar play no vídeo:", playErr);
-        }
+        await videoRef.current.play();
       }
     } catch (err: any) {
       console.error('Camera error:', err);
-      setError('Não foi possível acessar a câmera. Tente usar o anexo de arquivo abaixo.');
+      setError('Não foi possível acessar a câmera. Tente anexar uma foto.');
     }
   }, [stopCamera]);
 
+  const processImage = (imageDataUrl: string) => {
+    setIsProcessing(true);
+    setError(null);
+
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) return;
+
+      canvas.width = img.width;
+      canvas.height = img.height;
+      context.drawImage(img, 0, 0);
+
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+
+      if (code) {
+        setDecodedCode(code.data);
+        setPhotoTaken(imageDataUrl);
+      } else {
+        setError("Não foi possível encontrar um QR Code nesta imagem. Tente novamente com mais luz ou foco.");
+        setPhotoTaken(imageDataUrl);
+      }
+      setIsProcessing(false);
+    };
+    img.src = imageDataUrl;
+  };
+
   const capturePhoto = useCallback(() => {
     if (videoRef.current && canvasRef.current) {
-      setIsCapturing(true);
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
@@ -68,11 +97,10 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        setPhotoTaken(photoDataUrl);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
         stopCamera();
+        processImage(dataUrl);
       }
-      setIsCapturing(false);
     }
   }, [stopCamera]);
 
@@ -81,21 +109,16 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPhotoTaken(reader.result as string);
+        processImage(reader.result as string);
         stopCamera();
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const retakePhoto = () => {
-    setPhotoTaken(null);
-    startCamera();
-  };
-
-  const confirmPhoto = () => {
-    if (photoTaken) {
-      onCapture(photoTaken);
+  const handleConfirm = () => {
+    if (decodedCode) {
+      onCapture(decodedCode);
     }
   };
 
@@ -109,7 +132,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       <div className="flex items-center justify-between p-4 bg-black/80 backdrop-blur-sm z-20">
         <div className="flex items-center gap-2 text-white">
           <Camera className="w-5 h-5 text-primary" />
-          <span className="font-semibold">Validar por Foto</span>
+          <span className="font-semibold">Scanner de Imagem</span>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20">
           <X className="w-5 h-5" />
@@ -122,15 +145,35 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
             <img 
               src={photoTaken} 
               alt="Captura" 
-              className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl"
+              className={`max-w-full max-h-[60vh] object-contain rounded-lg shadow-2xl ${!decodedCode ? 'opacity-50 grayscale' : ''}`}
             />
-            <div className="flex gap-4 mt-8 w-full max-w-xs">
-              <Button onClick={retakePhoto} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10">
-                <RotateCcw className="w-4 h-4 mr-2" /> Refazer
-              </Button>
-              <Button onClick={confirmPhoto} className="flex-1 bg-green-600 hover:bg-green-700">
-                Confirmar
-              </Button>
+            
+            <div className="mt-6 w-full max-w-xs space-y-4">
+              {isProcessing ? (
+                <div className="flex items-center justify-center text-white gap-2">
+                  <Loader2 className="animate-spin" /> Lendo QR Code...
+                </div>
+              ) : decodedCode ? (
+                <div className="bg-green-500/20 border border-green-500 text-green-400 p-3 rounded-lg text-center text-sm">
+                  QR Code detectado com sucesso!
+                </div>
+              ) : (
+                <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded-lg flex items-start gap-2 text-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error || "QR Code não encontrado."}</span>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button onClick={() => { setPhotoTaken(null); startCamera(); }} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10">
+                  <RotateCcw className="w-4 h-4 mr-2" /> Tentar Outra
+                </Button>
+                {decodedCode && (
+                  <Button onClick={handleConfirm} className="flex-1 bg-primary hover:bg-primary/90">
+                    Validar Agora
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         ) : (
@@ -144,16 +187,11 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
             />
             <canvas ref={canvasRef} className="hidden" />
             
-            {/* Overlay de Guia */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-72 h-72 border-2 border-white/30 rounded-3xl border-dashed" />
-            </div>
-
-            {error && (
-              <div className="absolute top-20 left-4 right-4 bg-red-500/90 text-white p-3 rounded-lg text-sm text-center">
-                {error}
+              <div className="w-64 h-64 border-2 border-primary/50 rounded-3xl border-dashed flex items-center justify-center">
+                <div className="w-full h-0.5 bg-primary/30 animate-scan" />
               </div>
-            )}
+            </div>
 
             <div className="absolute bottom-12 left-0 right-0 flex flex-col items-center gap-6">
               <div className="flex items-center gap-8">
@@ -175,16 +213,15 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
 
                 <Button 
                   onClick={capturePhoto} 
-                  className="w-20 h-20 rounded-full bg-white hover:bg-gray-200 text-black shadow-xl"
-                  disabled={isCapturing}
+                  className="w-20 h-20 rounded-full bg-white hover:bg-gray-200 text-black shadow-xl flex items-center justify-center"
                 >
-                  {isCapturing ? <Loader2 className="w-8 h-8 animate-spin" /> : <div className="w-16 h-16 rounded-full border-4 border-black/10" />}
+                  <div className="w-16 h-16 rounded-full border-4 border-black/5" />
                 </Button>
 
-                <div className="w-12" /> {/* Spacer para centralizar o botão principal */}
+                <div className="w-12" />
               </div>
               <p className="text-white/70 text-xs font-medium uppercase tracking-widest">
-                Tire uma foto ou anexe um arquivo
+                Capture o QR Code centralizado
               </p>
             </div>
           </>

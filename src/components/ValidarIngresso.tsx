@@ -6,14 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PhotoCapture } from '@/components/PhotoCapture';
 import { ResultadoValidacao } from '@/components/ResultadoValidacao';
-import { Camera, Search, Loader2, Image } from 'lucide-react';
+import { Camera, Search, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function ValidarIngresso() {
   const [codigoManual, setCodigoManual] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPhotoCapture, setShowPhotoCapture] = useState(false);
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ResultadoType | null>(null);
   const { validarIngresso } = useIngressos();
   const { toast } = useToast();
@@ -22,7 +21,7 @@ export function ValidarIngresso() {
     if (!codigo.trim()) {
       toast({
         title: 'Campo obrigatório',
-        description: 'Digite o código do ingresso.',
+        description: 'Digite ou capture o código do ingresso.',
         variant: 'destructive',
       });
       return;
@@ -35,7 +34,6 @@ export function ValidarIngresso() {
       const result = await validarIngresso(codigo.trim());
       setResultado(result);
       setCodigoManual('');
-      setCapturedPhoto(null);
     } catch (error) {
       toast({
         title: 'Erro',
@@ -52,21 +50,12 @@ export function ValidarIngresso() {
     handleValidar(codigoManual);
   };
 
-  const handlePhotoCapture = (photoDataUrl: string) => {
-    setCapturedPhoto(photoDataUrl);
-    setShowPhotoCapture(false);
-    
-    // Aqui você poderia implementar OCR para extrair o código da foto
-    // Por enquanto, vamos apenas mostrar a foto capturada e pedir o código manualmente
-    toast({
-      title: 'Foto capturada!',
-      description: 'Agora digite o código do ingresso para validar.',
-    });
+  const handleCodeCaptured = (code: string) => {
+    handleValidar(code);
   };
 
   const handleNovo = () => {
     setResultado(null);
-    setCapturedPhoto(null);
   };
 
   if (resultado) {
@@ -80,7 +69,7 @@ export function ValidarIngresso() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-lg">
       {showPhotoCapture && (
-        <PhotoCapture onScan={handlePhotoCapture} onClose={() => setShowPhotoCapture(false)} />
+        <PhotoCapture onCapture={handleCodeCaptured} onClose={() => setShowPhotoCapture(false)} />
       )}
 
       <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
@@ -90,45 +79,19 @@ export function ValidarIngresso() {
             Validar Ingresso
           </CardTitle>
           <CardDescription>
-            Tire uma foto ou digite o código do ingresso
+            Escaneie o QR Code ou digite o código manualmente
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <Button
             onClick={() => setShowPhotoCapture(true)}
-            className="w-full h-24 text-lg"
+            className="w-full h-24 text-lg flex flex-col gap-2"
             size="lg"
             disabled={isLoading}
           >
-            <Camera className="w-8 h-8 mr-3" />
-            Tirar Foto do Ingresso
+            <Camera className="w-8 h-8" />
+            <span>Escanear QR Code</span>
           </Button>
-
-          {capturedPhoto && (
-            <div className="space-y-4">
-              <div className="relative">
-                <img 
-                  src={capturedPhoto} 
-                  alt="Foto capturada" 
-                  className="w-full h-48 object-cover rounded-lg border-2 border-border"
-                />
-                <div className="absolute top-2 right-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCapturedPhoto(null)}
-                    className="bg-black/50 border-white/30 text-white hover:bg-black/70"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground text-center">
-                <Image className="w-4 h-4 inline mr-1" />
-                Foto capturada! Agora digite o código abaixo.
-              </p>
-            </div>
-          )}
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -160,7 +123,7 @@ export function ValidarIngresso() {
               ) : (
                 <>
                   <Search className="mr-2 h-4 w-4" />
-                  Validar Ingresso
+                  Validar Manualmente
                 </>
               )}
             </Button>
