@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { QrScanner } from 'react-qr-scanner';
+import QrScanner from 'react-qr-scanner';
 import { Button } from '@/components/ui/button';
 import { X, Camera, Loader2 } from 'lucide-react';
 
