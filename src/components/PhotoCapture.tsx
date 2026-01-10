@@ -32,16 +32,13 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     setDecodedCode(null);
     
     try {
-      const constraints = {
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          width: { ideal: 1920 }, // Aumentando a resolução ideal para melhor captura
+          height: { ideal: 1080 }
+        }
+      });
       streamRef.current = stream;
       
       if (videoRef.current) {
@@ -60,26 +57,56 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     setError(null);
 
     const img = new Image();
+    img.crossOrigin = "Anonymous";
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
+      const context = canvas.getContext('2d', { willReadFrequently: true });
       if (!context) return;
 
-      canvas.width = img.width;
-      canvas.height = img.height;
-      context.drawImage(img, 0, 0);
+      // Redimensionar para um tamanho gerenciável mas nítido
+      const maxDim = 1024;
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > height) {
+        if (width > maxDim) {
+          height *= maxDim / width;
+          width = maxDim;
+        }
+      } else {
+        if (height > maxDim) {
+          width *= maxDim / height;
+          height = maxDim;
+        }
+      }
 
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      canvas.width = width;
+      canvas.height = height;
+      context.drawImage(img, 0, 0, width, height);
+
+      const imageData = context.getImageData(0, 0, width, height);
+      
+      // Tentar decodificar
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
         inversionAttempts: "dontInvert",
       });
 
-      if (code) {
+      if (code && code.data) {
         setDecodedCode(code.data);
         setPhotoTaken(imageDataUrl);
       } else {
-        setError("Não foi possível encontrar um QR Code nesta imagem. Tente novamente com mais luz ou foco.");
-        setPhotoTaken(imageDataUrl);
+        // Segunda tentativa: Tentar com inversão (para QR codes em fundos escuros)
+        const codeInverted = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "attemptBoth",
+        });
+        
+        if (codeInverted && codeInverted.data) {
+          setDecodedCode(codeInverted.data);
+          setPhotoTaken(imageDataUrl);
+        } else {
+          setError("QR Code não detectado. Certifique-se que o código está nítido e bem iluminado.");
+          setPhotoTaken(imageDataUrl);
+        }
       }
       setIsProcessing(false);
     };
@@ -87,17 +114,16 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
   };
 
   const capturePhoto = useCallback(() => {
-    if (videoRef.current && canvasRef.current) {
+    if (videoRef.current) {
       const video = videoRef.current;
-      const canvas = canvasRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       
       if (context && video.readyState === 4) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        context.drawImage(video, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
         stopCamera();
         processImage(dataUrl);
       }
@@ -116,12 +142,6 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     }
   };
 
-  const handleConfirm = () => {
-    if (decodedCode) {
-      onCapture(decodedCode);
-    }
-  };
-
   useEffect(() => {
     startCamera();
     return () => stopCamera();
@@ -132,7 +152,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       <div className="flex items-center justify-between p-4 bg-black/80 backdrop-blur-sm z-20">
         <div className="flex items-center gap-2 text-white">
           <Camera className="w-5 h-5 text-primary" />
-          <span className="font-semibold">Scanner de Imagem</span>
+          <span className="font-semibold">Validar Ingresso</span>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20">
           <X className="w-5 h-5" />
@@ -142,25 +162,28 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
         {photoTaken ? (
           <div className="relative w-full h-full flex flex-col items-center justify-center p-4">
-            <img 
-              src={photoTaken} 
-              alt="Captura" 
-              className={`max-w-full max-h-[60vh] object-contain rounded-lg shadow-2xl ${!decodedCode ? 'opacity-50 grayscale' : ''}`}
-            />
+            <div className="relative max-w-full max-h-[60vh]">
+              <img 
+                src={photoTaken} 
+                alt="Captura" 
+                className={`rounded-lg shadow-2xl object-contain ${!decodedCode ? 'opacity-60 grayscale' : ''}`}
+              />
+              {isProcessing && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                  <Loader2 className="w-10 h-10 text-white animate-spin" />
+                </div>
+              )}
+            </div>
             
             <div className="mt-6 w-full max-w-xs space-y-4">
-              {isProcessing ? (
-                <div className="flex items-center justify-center text-white gap-2">
-                  <Loader2 className="animate-spin" /> Lendo QR Code...
+              {!isProcessing && decodedCode ? (
+                <div className="bg-green-500/20 border border-green-500 text-green-400 p-3 rounded-lg text-center font-medium">
+                  Código Identificado!
                 </div>
-              ) : decodedCode ? (
-                <div className="bg-green-500/20 border border-green-500 text-green-400 p-3 rounded-lg text-center text-sm">
-                  QR Code detectado com sucesso!
-                </div>
-              ) : (
+              ) : !isProcessing && (
                 <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded-lg flex items-start gap-2 text-sm">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{error || "QR Code não encontrado."}</span>
+                  <span>{error}</span>
                 </div>
               )}
 
@@ -169,7 +192,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
                   <RotateCcw className="w-4 h-4 mr-2" /> Tentar Outra
                 </Button>
                 {decodedCode && (
-                  <Button onClick={handleConfirm} className="flex-1 bg-primary hover:bg-primary/90">
+                  <Button onClick={() => onCapture(decodedCode)} className="flex-1 bg-primary hover:bg-primary/90">
                     Validar Agora
                   </Button>
                 )}
@@ -185,11 +208,14 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
               muted
               className="w-full h-full object-cover"
             />
-            <canvas ref={canvasRef} className="hidden" />
             
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-64 h-64 border-2 border-primary/50 rounded-3xl border-dashed flex items-center justify-center">
-                <div className="w-full h-0.5 bg-primary/30 animate-scan" />
+              <div className="relative w-72 h-72">
+                <div className="absolute top-0 left-0 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-2xl" />
+                <div className="absolute top-0 right-0 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-2xl" />
+                <div className="absolute bottom-0 left-0 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-2xl" />
+                <div className="absolute bottom-0 right-0 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-2xl" />
+                <div className="absolute inset-0 bg-primary/5 animate-pulse rounded-2xl" />
               </div>
             </div>
 
@@ -221,7 +247,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
                 <div className="w-12" />
               </div>
               <p className="text-white/70 text-xs font-medium uppercase tracking-widest">
-                Capture o QR Code centralizado
+                Centralize o QR Code na moldura
               </p>
             </div>
           </>
