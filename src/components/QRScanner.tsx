@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { QrReader } from 'react-qr-scanner';
+import { QrScanner } from 'react-qr-scanner';
 import { Button } from '@/components/ui/button';
 import { X, Camera, Loader2 } from 'lucide-react';
 
@@ -76,8 +76,9 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
             <div className="w-full h-full">
               {cameraActive && (
                 <div className="relative w-full h-full">
-                  <QrReader
+                  <QrScanner
                     onResult={handleScan}
+                    onError={handleError}
                     constraints={constraints}
                     style={{ 
                       position: 'absolute',
