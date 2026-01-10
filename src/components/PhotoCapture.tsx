@@ -1,6 +1,6 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { X, Camera, RotateCcw, Loader2 } from 'lucide-react';
+import { X, Camera, RotateCcw, Loader2, Upload } from 'lucide-react';
 
 interface PhotoCaptureProps {
   onCapture: (photoDataUrl: string) => void;
@@ -10,46 +10,51 @@ interface PhotoCaptureProps {
 export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
   const [error, setError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const [stream, setStream] = useState<MediaStream | null>(null);
   const [photoTaken, setPhotoTaken] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  }, []);
 
   const startCamera = useCallback(async () => {
+    stopCamera();
+    setError(null);
+    
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      const constraints = {
         video: {
           facingMode: 'environment',
           width: { ideal: 1280 },
           height: { ideal: 720 }
-        }
-      });
+        },
+        audio: false
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
       
-      setStream(mediaStream);
       if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
+        videoRef.current.srcObject = stream;
+        // Importante para iOS e navegadores modernos
+        videoRef.current.setAttribute('playsinline', 'true');
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.error("Erro ao dar play no vídeo:", playErr);
+        }
       }
-      setError(null);
     } catch (err: any) {
       console.error('Camera error:', err);
-      if (err.name === 'NotAllowedError') {
-        setError('Permissão da câmera negada. Por favor, permita o acesso à câmera nas configurações do navegador.');
-      } else if (err.name === 'NotFoundError') {
-        setError('Nenhuma câmera encontrada. Verifique se seu dispositivo tem uma câmera.');
-      } else if (err.name === 'NotSupportedError') {
-        setError('Câmera não suportada. Tente usar um navegador diferente.');
-      } else {
-        setError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
-      }
+      setError('Não foi possível acessar a câmera. Tente usar o anexo de arquivo abaixo.');
     }
-  }, []);
-
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-  }, [stream]);
+  }, [stopCamera]);
 
   const capturePhoto = useCallback(() => {
     if (videoRef.current && canvasRef.current) {
@@ -58,7 +63,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
       
-      if (context) {
+      if (context && video.readyState === 4) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -71,6 +76,18 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     }
   }, [stopCamera]);
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoTaken(reader.result as string);
+        stopCamera();
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const retakePhoto = () => {
     setPhotoTaken(null);
     startCamera();
@@ -82,11 +99,9 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     startCamera();
-    return () => {
-      stopCamera();
-    };
+    return () => stopCamera();
   }, [startCamera, stopCamera]);
 
   return (
@@ -94,7 +109,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       <div className="flex items-center justify-between p-4 bg-black/80 backdrop-blur-sm z-20">
         <div className="flex items-center gap-2 text-white">
           <Camera className="w-5 h-5 text-primary" />
-          <span className="font-semibold">Capturar Foto</span>
+          <span className="font-semibold">Validar por Foto</span>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20">
           <X className="w-5 h-5" />
@@ -102,42 +117,19 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       </div>
 
       <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
-        {error ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-30 p-8 text-center">
-            <Camera className="w-16 h-16 text-white/40 mb-4" />
-            <p className="text-white mb-6">{error}</p>
-            <div className="flex gap-3">
-              <Button onClick={startCamera} variant="outline" className="border-white/30 text-white hover:bg-white/10">
-                Tentar Novamente
-              </Button>
-              <Button onClick={onClose} variant="outline" className="border-white/30 text-white hover:bg-white/10">
-                Voltar
-              </Button>
-            </div>
-          </div>
-        ) : photoTaken ? (
-          <div className="relative w-full h-full flex items-center justify-center">
+        {photoTaken ? (
+          <div className="relative w-full h-full flex flex-col items-center justify-center p-4">
             <img 
               src={photoTaken} 
-              alt="Foto capturada" 
-              className="max-w-full max-h-full object-contain"
+              alt="Captura" 
+              className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl"
             />
-            <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-4 px-8">
-              <Button 
-                onClick={retakePhoto} 
-                variant="outline" 
-                size="lg"
-                className="border-white/30 text-white hover:bg-white/10"
-              >
-                <RotateCcw className="w-5 h-5 mr-2" />
-                Refazer
+            <div className="flex gap-4 mt-8 w-full max-w-xs">
+              <Button onClick={retakePhoto} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10">
+                <RotateCcw className="w-4 h-4 mr-2" /> Refazer
               </Button>
-              <Button 
-                onClick={confirmPhoto} 
-                size="lg"
-                className="bg-green-600 hover:bg-green-700"
-              >
-                Confirmar Foto
+              <Button onClick={confirmPhoto} className="flex-1 bg-green-600 hover:bg-green-700">
+                Confirmar
               </Button>
             </div>
           </div>
@@ -152,37 +144,51 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
             />
             <canvas ref={canvasRef} className="hidden" />
             
+            {/* Overlay de Guia */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="relative w-64 h-64">
-                <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-primary rounded-tl-lg" />
-                <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-primary rounded-tr-lg" />
-                <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-primary rounded-bl-lg" />
-                <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-primary rounded-br-lg" />
-              </div>
+              <div className="w-72 h-72 border-2 border-white/30 rounded-3xl border-dashed" />
             </div>
 
-            <div className="absolute bottom-8 left-0 right-0 flex justify-center">
-              <Button 
-                onClick={capturePhoto} 
-                size="lg"
-                disabled={isCapturing}
-                className="w-20 h-20 rounded-full bg-white hover:bg-gray-100 text-black"
-              >
-                {isCapturing ? (
-                  <Loader2 className="w-8 h-8 animate-spin" />
-                ) : (
-                  <Camera className="w-8 h-8" />
-                )}
-              </Button>
+            {error && (
+              <div className="absolute top-20 left-4 right-4 bg-red-500/90 text-white p-3 rounded-lg text-sm text-center">
+                {error}
+              </div>
+            )}
+
+            <div className="absolute bottom-12 left-0 right-0 flex flex-col items-center gap-6">
+              <div className="flex items-center gap-8">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                />
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="w-12 h-12 rounded-full border-white/30 text-white bg-black/20"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="w-5 h-5" />
+                </Button>
+
+                <Button 
+                  onClick={capturePhoto} 
+                  className="w-20 h-20 rounded-full bg-white hover:bg-gray-200 text-black shadow-xl"
+                  disabled={isCapturing}
+                >
+                  {isCapturing ? <Loader2 className="w-8 h-8 animate-spin" /> : <div className="w-16 h-16 rounded-full border-4 border-black/10" />}
+                </Button>
+
+                <div className="w-12" /> {/* Spacer para centralizar o botão principal */}
+              </div>
+              <p className="text-white/70 text-xs font-medium uppercase tracking-widest">
+                Tire uma foto ou anexe um arquivo
+              </p>
             </div>
           </>
         )}
-      </div>
-
-      <div className="p-6 bg-black/80 backdrop-blur-sm text-center z-20">
-        <p className="text-white/80 text-sm">
-          Tire uma foto do documento ou ingresso para validação
-        </p>
       </div>
     </div>
   );
