@@ -35,8 +35,8 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         }
       });
       streamRef.current = stream;
@@ -58,67 +58,42 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     setPhotoTaken(imageDataUrl);
 
     const img = new Image();
-    img.crossOrigin = "Anonymous";
+    img.src = imageDataUrl;
     
     img.onload = async () => {
       try {
         const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d', { willReadFrequently: true });
-        if (!context) throw new Error('Canvas não disponível');
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Canvas context error');
 
-        // Redimensionar para garantir que o QR code seja legível mas não pesado demais
-        const maxDim = 1200;
-        let width = img.width;
-        let height = img.height;
-        
-        if (width > height && width > maxDim) {
-          height *= maxDim / width;
-          width = maxDim;
-        } else if (height > maxDim) {
-          width *= maxDim / height;
-          height = maxDim;
-        }
+        // Usar dimensões originais para prints digitais
+        canvas.width = img.width;
+        canvas.height = img.height;
+        context.drawImage(img, 0, 0);
 
-        canvas.width = width;
-        canvas.height = height;
-        
-        // Aplicar melhorias de imagem no canvas
-        context.filter = 'contrast(1.2) brightness(1.05)';
-        context.drawImage(img, 0, 0, width, height);
-
-        // Configurar hints para o ZXing
         const hints = new Map();
         hints.set(DecodeHintType.TRY_HARDER, true);
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [0]); // QR_CODE
+        // Removido restrição de formato para ser mais flexível
         
         const reader = new BrowserQRCodeReader(hints);
-        
-        // Tentar decodificar diretamente do canvas
         const result = await reader.decodeFromCanvas(canvas);
         
         if (result && result.getText()) {
-          console.log('[PhotoCapture] QR Code detected:', result.getText());
-          setDecodedCode(result.getText());
+          const code = result.getText();
+          console.log('[PhotoCapture] Success:', code);
+          setDecodedCode(code);
+          // Validação automática ao detectar
+          setTimeout(() => onCapture(code), 500);
         } else {
-          throw new Error('QR Code não detectado');
+          throw new Error('No code found');
         }
-        
       } catch (err) {
-        console.error('[PhotoCapture] Decoding error:', err);
-        setError(
-          "QR Code não detectado. Certifique-se que o código está nítido, bem iluminado e centralizado."
-        );
+        console.error('[PhotoCapture] Error:', err);
+        setError("Não conseguimos ler este QR Code. Tente aproximar mais ou garantir que o código não esteja cortado.");
       } finally {
         setIsProcessing(false);
       }
     };
-    
-    img.onerror = () => {
-      setError('Erro ao carregar a imagem');
-      setIsProcessing(false);
-    };
-    
-    img.src = imageDataUrl;
   };
 
   const capturePhoto = useCallback(() => {
@@ -131,7 +106,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       
       if (context && video.readyState === 4) {
         context.drawImage(video, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        const dataUrl = canvas.toDataURL('image/png'); // PNG é melhor para preservar bordas de QR
         stopCamera();
         processImage(dataUrl);
       }
@@ -142,9 +117,10 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        processImage(reader.result as string);
-        stopCamera();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          processImage(event.target.result as string);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -174,92 +150,65 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
               <img 
                 src={photoTaken} 
                 alt="Captura" 
-                className={`rounded-lg shadow-2xl object-contain ${!decodedCode && !isProcessing ? 'opacity-60 grayscale' : ''}`}
+                className={`rounded-lg shadow-2xl object-contain ${decodedCode ? 'border-4 border-green-500' : ''}`}
               />
               {isProcessing && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="w-10 h-10 text-white animate-spin" />
-                    <span className="text-white text-sm font-medium">Analisando...</span>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                    <span className="text-white font-medium">Lendo QR Code...</span>
                   </div>
                 </div>
               )}
             </div>
             
             <div className="mt-6 w-full max-w-xs space-y-4">
-              {!isProcessing && decodedCode ? (
-                <div className="bg-green-500/20 border border-green-500 text-green-400 p-3 rounded-lg text-center font-medium">
-                  Código Identificado!
+              {decodedCode ? (
+                <div className="bg-green-500 text-white p-4 rounded-lg text-center font-bold animate-bounce">
+                  QR CODE DETECTADO!
                 </div>
               ) : !isProcessing && error && (
-                <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded-lg flex items-start gap-2 text-sm">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="bg-red-500/20 border border-red-500 text-red-400 p-4 rounded-lg flex items-start gap-2 text-sm">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
-              <div className="flex gap-3">
-                <Button onClick={() => { setPhotoTaken(null); startCamera(); }} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10">
-                  <RotateCcw className="w-4 h-4 mr-2" /> Tentar Outra
-                </Button>
-                {decodedCode && !isProcessing && (
-                  <Button onClick={() => onCapture(decodedCode)} className="flex-1 bg-primary hover:bg-primary/90">
-                    Validar Agora
+              {!decodedCode && !isProcessing && (
+                <div className="flex gap-3">
+                  <Button onClick={() => { setPhotoTaken(null); startCamera(); }} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10">
+                    <RotateCcw className="w-4 h-4 mr-2" /> Tentar Outra
                   </Button>
-                )}
-              </div>
+                  <label className="flex-1">
+                    <Button variant="secondary" className="w-full" onClick={() => fileInputRef.current?.click()}>
+                      <Upload className="w-4 h-4 mr-2" /> Anexar
+                    </Button>
+                  </label>
+                </div>
+              )}
             </div>
           </div>
         ) : (
           <>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
-            
+            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="relative w-72 h-72">
-                <div className="absolute top-0 left-0 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-2xl" />
-                <div className="absolute top-0 right-0 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-2xl" />
-                <div className="absolute bottom-0 left-0 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-2xl" />
-                <div className="absolute bottom-0 right-0 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-2xl" />
-                <div className="absolute inset-0 bg-primary/5 animate-pulse rounded-2xl" />
+              <div className="w-72 h-72 border-2 border-primary/50 rounded-2xl relative">
+                <div className="absolute -top-1 -left-1 w-12 h-12 border-t-4 border-l-4 border-primary rounded-tl-2xl" />
+                <div className="absolute -top-1 -right-1 w-12 h-12 border-t-4 border-r-4 border-primary rounded-tr-2xl" />
+                <div className="absolute -bottom-1 -left-1 w-12 h-12 border-b-4 border-l-4 border-primary rounded-bl-2xl" />
+                <div className="absolute -bottom-1 -right-1 w-12 h-12 border-b-4 border-r-4 border-primary rounded-br-2xl" />
               </div>
             </div>
 
             <div className="absolute bottom-12 left-0 right-0 flex flex-col items-center gap-6">
               <div className="flex items-center gap-8">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                />
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="w-12 h-12 rounded-full border-white/30 text-white bg-black/20"
-                  onClick={() => fileInputRef.current?.click()}
-                >
+                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                <Button variant="outline" size="icon" className="w-12 h-12 rounded-full border-white/30 text-white bg-black/20" onClick={() => fileInputRef.current?.click()}>
                   <Upload className="w-5 h-5" />
                 </Button>
-
-                <Button 
-                  onClick={capturePhoto} 
-                  className="w-20 h-20 rounded-full bg-white hover:bg-gray-200 text-black shadow-xl flex items-center justify-center"
-                >
-                  <div className="w-16 h-16 rounded-full border-4 border-black/5" />
-                </Button>
-
+                <Button onClick={capturePhoto} className="w-20 h-20 rounded-full bg-white hover:bg-gray-200 text-black shadow-xl" />
                 <div className="w-12" />
               </div>
-              <p className="text-white/70 text-xs font-medium uppercase tracking-widest">
-                Centralize o QR Code na moldura
-              </p>
             </div>
           </>
         )}
