@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, AlertCircle } from 'lucide-react';
 import type { Ingresso } from '@/contexts/IngressoContext';
 
 interface IngressoPersonalizadoProps {
@@ -24,47 +24,52 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
     setError(null);
 
     try {
-      // 1. Carregar a imagem base
       const baseImage = new Image();
       baseImage.src = '/src/images/MOCK.png';
       
       await new Promise((resolve, reject) => {
         baseImage.onload = resolve;
-        baseImage.onerror = () => reject(new Error('Não foi possível carregar a imagem base MOCK.png'));
+        baseImage.onerror = () => reject(new Error('Não foi possível carregar a imagem base MOCK.png. Verifique se o arquivo existe em src/images/'));
       });
 
-      // Configurar tamanho do canvas baseado na imagem
+      // Forçar o canvas a ter o tamanho exato da imagem original (importante para as margens baterem)
       canvas.width = baseImage.width;
       canvas.height = baseImage.height;
 
-      // Desenhar imagem base
+      // Limpar e desenhar imagem base
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(baseImage, 0, 0);
 
-      // 2. Configurar e desenhar o Nome
-      // Margem superior 569px, Margens laterais 283px
+      const centerX = canvas.width / 2;
+
+      // 1. Desenhar o Nome
+      // Margem superior 569px (distância do topo da imagem até o topo do texto)
       // Estilo: Serif, SmallCaps, Cor #5d3f04
+      const fontSizeNome = 60; 
       ctx.fillStyle = '#5d3f04';
       ctx.textAlign = 'center';
-      ctx.font = 'small-caps 60px serif'; // Tamanho estimado para o nome
+      ctx.textBaseline = 'top'; // Facilita o cálculo da margem superior exata
+      ctx.font = `small-caps ${fontSizeNome}px serif`;
       
-      const centerX = canvas.width / 2;
-      const nomeY = 569 + 45; // 569 é o topo, adicionamos um offset para a linha de base
+      // 569px é a margem do topo até o início do texto
+      const nomeY = 569;
       ctx.fillText(ingresso.nome_convidado.toUpperCase(), centerX, nomeY);
 
-      // 3. Configurar e desenhar o ID
-      // Abaixo do nome, 55px de margem top, tamanho 30px
-      ctx.font = 'small-caps 30px serif';
-      const idY = nomeY + 55;
+      // 2. Desenhar o ID
+      // 55px de margem top em relação ao nome
+      // Tamanho 30px
+      const fontSizeId = 30;
+      ctx.font = `small-caps ${fontSizeId}px serif`;
+      const idY = nomeY + fontSizeNome + 55;
       ctx.fillText(`ID: ${ingresso.id.split('-')[0].toUpperCase()}`, centerX, idY);
 
-      // 4. Gerar e desenhar o QR Code
+      // 3. Desenhar o QR Code
       // Tamanho 419x419, Cor #322305, Sem background
-      // Margem topo 769px, Margem bottom 162px
+      // Margem topo 769px (distância do topo da imagem até o topo do QR)
       const qrSize = 419;
       const qrY = 769;
-      const qrX = (canvas.width - qrSize) / 2;
+      const qrX = centerX - (qrSize / 2);
 
-      // Para desenhar o QR Code no canvas, precisamos dele como imagem
       const svgElement = document.getElementById(`qr-hidden-${ingresso.id}`) as unknown as SVGSVGElement;
       if (svgElement) {
         const svgData = new XMLSerializer().serializeToString(svgElement);
@@ -98,7 +103,6 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
   const handleDownload = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
     const link = document.createElement('a');
     link.download = `Ingresso_${ingresso.nome_convidado}.png`;
     link.href = canvas.toDataURL('image/png');
@@ -107,7 +111,6 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
-      {/* QR Code oculto usado para gerar a imagem do Canvas */}
       <div className="hidden">
         <QRCodeSVG
           id={`qr-hidden-${ingresso.id}`}
@@ -119,34 +122,37 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
         />
       </div>
 
-      <div className="relative border rounded-xl overflow-hidden bg-muted aspect-[3/4] w-full max-w-[400px] flex items-center justify-center">
+      <div className="relative border rounded-xl overflow-hidden bg-muted w-full max-w-[400px] shadow-inner">
         {isGenerating && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
             <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
-            <p className="text-sm text-muted-foreground">Gerando ingresso...</p>
+            <p className="text-sm text-muted-foreground">Processando medidas...</p>
           </div>
         )}
         
         {error ? (
-          <div className="p-6 text-center">
-            <p className="text-destructive text-sm">{error}</p>
-            <Button variant="outline" size="sm" className="mt-4" onClick={generateTicket}>
+          <div className="p-8 text-center flex flex-col items-center gap-3">
+            <AlertCircle className="w-10 h-10 text-destructive" />
+            <p className="text-destructive text-sm font-medium">{error}</p>
+            <Button variant="outline" size="sm" onClick={generateTicket}>
               Tentar Novamente
             </Button>
           </div>
         ) : (
-          <canvas 
-            ref={canvasRef} 
-            className="max-w-full h-auto shadow-lg"
-            style={{ display: isGenerating ? 'none' : 'block' }}
-          />
+          <div className="overflow-auto max-h-[500px] bg-white">
+            <canvas 
+              ref={canvasRef} 
+              className="max-w-full h-auto block mx-auto"
+              style={{ display: isGenerating ? 'none' : 'block' }}
+            />
+          </div>
         )}
       </div>
 
       {!isGenerating && !error && (
-        <Button onClick={handleDownload} className="w-full">
+        <Button onClick={handleDownload} className="w-full shadow-lg">
           <Download className="w-4 h-4 mr-2" />
-          Baixar Ingresso Personalizado
+          Baixar Ingresso (Tamanho Real)
         </Button>
       )}
     </div>
