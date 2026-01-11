@@ -24,50 +24,48 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
     setError(null);
 
     try {
+      // Garantir que a fonte esteja carregada antes de desenhar no canvas
+      await document.fonts.load('48px GriffoClassico');
+
       const baseImage = new Image();
       baseImage.src = '/src/images/MOCK.png';
       
       await new Promise((resolve, reject) => {
         baseImage.onload = resolve;
-        baseImage.onerror = () => reject(new Error('Não foi possível carregar a imagem base MOCK.png. Verifique se o arquivo existe em src/images/'));
+        baseImage.onerror = () => reject(new Error('Erro ao carregar MOCK.png'));
       });
 
-      // Forçar o canvas a ter o tamanho exato da imagem original (importante para as margens baterem)
       canvas.width = baseImage.width;
       canvas.height = baseImage.height;
 
-      // Limpar e desenhar imagem base
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(baseImage, 0, 0);
 
       const centerX = canvas.width / 2;
 
       // 1. Desenhar o Nome
-      // Margem superior 569px (distância do topo da imagem até o topo do texto)
-      // Estilo: Serif, SmallCaps, Cor #5d3f04
-      const fontSizeNome = 60; 
+      // Margem superior: 520px, Tamanho: 48px, Cor: #5d3f04, Largura Máx: 419px
+      const fontSizeNome = 48;
       ctx.fillStyle = '#5d3f04';
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'top'; // Facilita o cálculo da margem superior exata
-      ctx.font = `small-caps ${fontSizeNome}px serif`;
+      ctx.textBaseline = 'top';
+      ctx.font = `${fontSizeNome}px GriffoClassico`;
       
-      // 569px é a margem do topo até o início do texto
-      const nomeY = 569;
-      ctx.fillText(ingresso.nome_convidado.toUpperCase(), centerX, nomeY);
+      const nomeY = 520;
+      const maxTextWidth = 419;
+      ctx.fillText(ingresso.nome_convidado.toUpperCase(), centerX, nomeY, maxTextWidth);
 
       // 2. Desenhar o ID
-      // 55px de margem top em relação ao nome
-      // Tamanho 30px
-      const fontSizeId = 30;
-      ctx.font = `small-caps ${fontSizeId}px serif`;
-      const idY = nomeY + fontSizeNome + 55;
+      // Margem superior em relação ao nome: 45px, Tamanho: 28px
+      const fontSizeId = 28;
+      ctx.font = `${fontSizeId}px GriffoClassico`;
+      const idY = nomeY + fontSizeNome + 45;
       ctx.fillText(`ID: ${ingresso.id.split('-')[0].toUpperCase()}`, centerX, idY);
 
       // 3. Desenhar o QR Code
-      // Tamanho 419x419, Cor #322305, Sem background
-      // Margem topo 769px (distância do topo da imagem até o topo do QR)
+      // Tamanho: 419x419, Cor: #322305, Margem superior: 720px
       const qrSize = 419;
-      const qrY = 769;
+      const qrY = 720;
       const qrX = centerX - (qrSize / 2);
 
       const svgElement = document.getElementById(`qr-hidden-${ingresso.id}`) as unknown as SVGSVGElement;
@@ -126,7 +124,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
         {isGenerating && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
             <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
-            <p className="text-sm text-muted-foreground">Processando medidas...</p>
+            <p className="text-sm text-muted-foreground">Aplicando medidas exatas...</p>
           </div>
         )}
         
