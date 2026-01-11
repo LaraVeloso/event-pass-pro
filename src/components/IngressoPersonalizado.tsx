@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
-import { Download, Loader2, AlertCircle } from 'lucide-react';
+import { FileDown, Loader2, AlertCircle } from 'lucide-react';
 import type { Ingresso } from '@/contexts/IngressoContext';
+import { jsPDF } from 'jspdf';
 
 interface IngressoPersonalizadoProps {
   ingresso: Ingresso;
@@ -24,7 +25,6 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
     setError(null);
 
     try {
-      // Garantir que a fonte esteja carregada
       await document.fonts.load('48px GriffoClassico');
 
       const baseImage = new Image();
@@ -44,34 +44,27 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       const centerX = canvas.width / 2;
       const offsetUp = 100; 
 
-      // 1. Desenhar o Nome com SmallCaps Real
+      // 1. Nome
       const fontSizeNome = 48;
       ctx.fillStyle = '#5d3f04';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      
       ctx.font = `normal normal normal ${fontSizeNome}px GriffoClassico`;
       // @ts-ignore
       ctx.fontVariant = 'small-caps';
-      
       const nomeY = 520 - offsetUp;
-      const maxTextWidth = 419;
-      
-      ctx.fillText(ingresso.nome_convidado, centerX, nomeY, maxTextWidth);
+      ctx.fillText(ingresso.nome_convidado, centerX, nomeY, 419);
 
-      // 2. Desenhar o ID
+      // 2. ID
       const fontSizeId = 28;
       ctx.font = `normal normal normal ${fontSizeId}px GriffoClassico`;
       // @ts-ignore
       ctx.fontVariant = 'small-caps';
-      
       const idY = (520 + fontSizeNome + 45) - offsetUp;
       ctx.fillText(`ID: ${ingresso.id.split('-')[0]}`, centerX, idY);
 
-      // 3. Desenhar o QR Code
-      // Reduzido 10% de 419px = ~377px
+      // 3. QR Code
       const qrSize = 377;
-      // Posição original era 720. Subimos 100px (offsetUp) e agora mais 10px para aproximar do ID.
       const qrY = 720 - offsetUp - 10;
       const qrX = centerX - (qrSize / 2);
 
@@ -105,13 +98,25 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
     generateTicket();
   }, [ingresso]);
 
-  const handleDownload = () => {
+  const handleDownloadPDF = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `Ingresso_${ingresso.nome_convidado}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+
+    const imgData = canvas.toDataURL('image/png');
+    
+    // Criar PDF com as dimensões proporcionais ao canvas
+    // O jsPDF usa mm por padrão. Vamos converter pixels para mm (aprox 0.264583 mm por px)
+    const width = canvas.width * 0.264583;
+    const height = canvas.height * 0.264583;
+    
+    const pdf = new jsPDF({
+      orientation: width > height ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: [width, height]
+    });
+
+    pdf.addImage(imgData, 'PNG', 0, 0, width, height);
+    pdf.save(`Ingresso_${ingresso.nome_convidado}.pdf`);
   };
 
   return (
@@ -131,7 +136,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
         {isGenerating && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
             <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
-            <p className="text-sm text-muted-foreground">Ajustando dimensões...</p>
+            <p className="text-sm text-muted-foreground">Gerando visualização...</p>
           </div>
         )}
         
@@ -155,9 +160,9 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       </div>
 
       {!isGenerating && !error && (
-        <Button onClick={handleDownload} className="w-full shadow-lg">
-          <Download className="w-4 h-4 mr-2" />
-          Baixar Ingresso (Tamanho Real)
+        <Button onClick={handleDownloadPDF} className="w-full shadow-lg">
+          <FileDown className="w-4 h-4 mr-2" />
+          Baixar Ingresso (PDF)
         </Button>
       )}
     </div>
