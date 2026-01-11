@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useIngressos, Ingresso } from '@/contexts/IngressoContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, UserCheck, CheckCircle2, Clock, User } from 'lucide-react';
+import { Search, UserCheck, CheckCircle2, Clock, User, QrCode, Download, X } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Dialog,
   DialogContent,
@@ -16,9 +18,13 @@ import {
 
 export function ListaConvidados() {
   const { ingressos, validarIngresso } = useIngressos();
+  const { user } = useAuth();
   const [busca, setBusca] = useState('');
   const [selecionado, setSelecionado] = useState<Ingresso | null>(null);
+  const [verQRCode, setVerQRCode] = useState<Ingresso | null>(null);
   const [isConfirmando, setIsConfirmando] = useState(false);
+
+  const isAdmin = user?.tipo === 'admin';
 
   const convidadosFiltrados = ingressos
     .filter(i => i.nome_convidado.toLowerCase().includes(busca.toLowerCase()))
@@ -33,6 +39,29 @@ export function ListaConvidados() {
     } finally {
       setIsConfirmando(false);
     }
+  };
+
+  const handleDownloadQR = (ingresso: Ingresso) => {
+    const svg = document.getElementById(`qr-list-${ingresso.id}`);
+    if (!svg) return;
+
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx?.drawImage(img, 0, 0);
+      const pngFile = canvas.toDataURL("image/png");
+      const downloadLink = document.createElement("a");
+      downloadLink.download = `QR_${ingresso.nome_convidado}.png`;
+      downloadLink.href = pngFile;
+      downloadLink.click();
+    };
+
+    img.src = "data:image/svg+xml;base64," + btoa(svgData);
   };
 
   return (
@@ -55,8 +84,8 @@ export function ListaConvidados() {
                 key={ingresso.id}
                 className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-background/50 hover:bg-accent/5 transition-colors"
               >
-                <div className="flex flex-col">
-                  <span className="font-medium text-sm">{ingresso.nome_convidado}</span>
+                <div className="flex flex-col flex-1 min-w-0 mr-2">
+                  <span className="font-medium text-sm truncate">{ingresso.nome_convidado}</span>
                   <div className="flex items-center gap-2 mt-1">
                     <Badge variant={ingresso.entrada_registrada ? "secondary" : "outline"} className="text-[10px] h-5">
                       {ingresso.entrada_registrada ? "Presente" : "Pendente"}
@@ -70,19 +99,33 @@ export function ListaConvidados() {
                   </div>
                 </div>
                 
-                {!ingresso.entrada_registrada && (
-                  <Button 
-                    size="sm" 
-                    variant="ghost" 
-                    className="h-8 w-8 p-0 text-primary hover:text-primary hover:bg-primary/10"
-                    onClick={() => setSelecionado(ingresso)}
-                  >
-                    <UserCheck className="w-4 h-4" />
-                  </Button>
-                )}
-                {ingresso.entrada_registrada && (
-                  <CheckCircle2 className="w-5 h-5 text-green-500/50 mr-1.5" />
-                )}
+                <div className="flex items-center gap-1">
+                  {isAdmin && (
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                      onClick={() => setVerQRCode(ingresso)}
+                      title="Ver QR Code"
+                    >
+                      <QrCode className="w-4 h-4" />
+                    </Button>
+                  )}
+
+                  {!ingresso.entrada_registrada ? (
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="h-8 w-8 p-0 text-primary hover:text-primary hover:bg-primary/10"
+                      onClick={() => setSelecionado(ingresso)}
+                      title="Confirmar Entrada"
+                    >
+                      <UserCheck className="w-4 h-4" />
+                    </Button>
+                  ) : (
+                    <CheckCircle2 className="w-5 h-5 text-green-500/50 mx-1.5" />
+                  )}
+                </div>
               </div>
             ))
           ) : (
@@ -93,6 +136,7 @@ export function ListaConvidados() {
         </div>
       </ScrollArea>
 
+      {/* Modal de Confirmação de Presença */}
       <Dialog open={!!selecionado} onOpenChange={(open) => !open && setSelecionado(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -107,8 +151,8 @@ export function ListaConvidados() {
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
                 <User className="w-6 h-6 text-primary" />
               </div>
-              <div>
-                <p className="font-bold text-lg">{selecionado.nome_convidado}</p>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-lg truncate">{selecionado.nome_convidado}</p>
                 <p className="text-xs text-muted-foreground font-mono">ID: {selecionado.id.split('-')[0]}...</p>
               </div>
             </div>
@@ -122,6 +166,38 @@ export function ListaConvidados() {
               {isConfirmando ? "Registrando..." : "Confirmar Entrada"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Visualização de QR Code (Admin) */}
+      <Dialog open={!!verQRCode} onOpenChange={(open) => !open && setVerQRCode(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>QR Code do Ingresso</DialogTitle>
+            <DialogDescription>
+              {verQRCode?.nome_convidado}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {verQRCode && (
+            <div className="flex flex-col items-center justify-center p-6 space-y-6">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-border">
+                <QRCodeSVG
+                  id={`qr-list-${verQRCode.id}`}
+                  value={verQRCode.id}
+                  size={200}
+                  level="H"
+                />
+              </div>
+              <Button 
+                className="w-full" 
+                onClick={() => handleDownloadQR(verQRCode)}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Baixar QR Code
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
