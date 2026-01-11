@@ -44,7 +44,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       const centerX = canvas.width / 2;
       const offsetUp = 100; 
 
-      // 1. Nome
+      // 1. Nome - Ajustado para baixo em 15px (de 520 para 535)
       const fontSizeNome = 48;
       ctx.fillStyle = '#5d3f04';
       ctx.textAlign = 'center';
@@ -52,10 +52,10 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       ctx.font = `normal normal normal ${fontSizeNome}px GriffoClassico`;
       // @ts-ignore
       ctx.fontVariant = 'small-caps';
-      const nomeY = 520 - offsetUp;
+      const nomeY = 535 - offsetUp;
       ctx.fillText(ingresso.nome_convidado, centerX, nomeY, 419);
 
-      // 2. ID
+      // 2. ID - Mantido na mesma posição
       const fontSizeId = 28;
       ctx.font = `normal normal normal ${fontSizeId}px GriffoClassico`;
       // @ts-ignore
@@ -103,9 +103,6 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
     if (!canvas) return;
 
     const imgData = canvas.toDataURL('image/png');
-    
-    // Criar PDF com as dimensões proporcionais ao canvas
-    // O jsPDF usa mm por padrão. Vamos converter pixels para mm (aprox 0.264583 mm por px)
     const width = canvas.width * 0.264583;
     const height = canvas.height * 0.264583;
     
