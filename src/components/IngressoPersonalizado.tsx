@@ -42,7 +42,8 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       ctx.drawImage(baseImage, 0, 0);
 
       const centerX = canvas.width / 2;
-      const offsetUp = 60; // Valor para subir os elementos
+      // Ajustado de 60 para 100 (subindo mais 40px)
+      const offsetUp = 100; 
 
       // 1. Desenhar o Nome com SmallCaps Real
       const fontSizeNome = 48;
@@ -50,17 +51,13 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       
-      // Aplicando font-variant para SmallCaps real
-      // Nota: O texto deve ser passado como está (mistura de maiúsculas/minúsculas) para o efeito funcionar
       ctx.font = `normal normal normal ${fontSizeNome}px GriffoClassico`;
-      // @ts-ignore - fontVariant é suportado na maioria dos browsers modernos no Canvas
+      // @ts-ignore
       ctx.fontVariant = 'small-caps';
       
       const nomeY = 520 - offsetUp;
       const maxTextWidth = 419;
       
-      // Se o nome vier todo em maiúsculas do banco, o efeito small-caps não aparece.
-      // Mantemos o texto original para que as minúsculas virem maiúsculas menores.
       ctx.fillText(ingresso.nome_convidado, centerX, nomeY, maxTextWidth);
 
       // 2. Desenhar o ID
