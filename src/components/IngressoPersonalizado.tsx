@@ -42,7 +42,6 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       ctx.drawImage(baseImage, 0, 0);
 
       const centerX = canvas.width / 2;
-      // Ajustado de 60 para 100 (subindo mais 40px)
       const offsetUp = 100; 
 
       // 1. Desenhar o Nome com SmallCaps Real
@@ -70,8 +69,10 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       ctx.fillText(`ID: ${ingresso.id.split('-')[0]}`, centerX, idY);
 
       // 3. Desenhar o QR Code
-      const qrSize = 419;
-      const qrY = 720 - offsetUp;
+      // Reduzido 10% de 419px = ~377px
+      const qrSize = 377;
+      // Posição original era 720. Subimos 100px (offsetUp) e agora mais 10px para aproximar do ID.
+      const qrY = 720 - offsetUp - 10;
       const qrX = centerX - (qrSize / 2);
 
       const svgElement = document.getElementById(`qr-hidden-${ingresso.id}`) as unknown as SVGSVGElement;
@@ -119,7 +120,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
         <QRCodeSVG
           id={`qr-hidden-${ingresso.id}`}
           value={ingresso.id}
-          size={419}
+          size={377}
           level="H"
           fgColor="#322305"
           includeMargin={false}
@@ -130,7 +131,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
         {isGenerating && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
             <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
-            <p className="text-sm text-muted-foreground">Ajustando posições...</p>
+            <p className="text-sm text-muted-foreground">Ajustando dimensões...</p>
           </div>
         )}
         
