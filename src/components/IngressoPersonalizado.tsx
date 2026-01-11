@@ -24,7 +24,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
     setError(null);
 
     try {
-      // Garantir que a fonte esteja carregada antes de desenhar no canvas
+      // Garantir que a fonte esteja carregada
       await document.fonts.load('48px GriffoClassico');
 
       const baseImage = new Image();
@@ -42,30 +42,39 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       ctx.drawImage(baseImage, 0, 0);
 
       const centerX = canvas.width / 2;
+      const offsetUp = 60; // Valor para subir os elementos
 
-      // 1. Desenhar o Nome
-      // Margem superior: 520px, Tamanho: 48px, Cor: #5d3f04, Largura Máx: 419px
+      // 1. Desenhar o Nome com SmallCaps Real
       const fontSizeNome = 48;
       ctx.fillStyle = '#5d3f04';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.font = `${fontSizeNome}px GriffoClassico`;
       
-      const nomeY = 520;
+      // Aplicando font-variant para SmallCaps real
+      // Nota: O texto deve ser passado como está (mistura de maiúsculas/minúsculas) para o efeito funcionar
+      ctx.font = `normal normal normal ${fontSizeNome}px GriffoClassico`;
+      // @ts-ignore - fontVariant é suportado na maioria dos browsers modernos no Canvas
+      ctx.fontVariant = 'small-caps';
+      
+      const nomeY = 520 - offsetUp;
       const maxTextWidth = 419;
-      ctx.fillText(ingresso.nome_convidado.toUpperCase(), centerX, nomeY, maxTextWidth);
+      
+      // Se o nome vier todo em maiúsculas do banco, o efeito small-caps não aparece.
+      // Mantemos o texto original para que as minúsculas virem maiúsculas menores.
+      ctx.fillText(ingresso.nome_convidado, centerX, nomeY, maxTextWidth);
 
       // 2. Desenhar o ID
-      // Margem superior em relação ao nome: 45px, Tamanho: 28px
       const fontSizeId = 28;
-      ctx.font = `${fontSizeId}px GriffoClassico`;
-      const idY = nomeY + fontSizeNome + 45;
-      ctx.fillText(`ID: ${ingresso.id.split('-')[0].toUpperCase()}`, centerX, idY);
+      ctx.font = `normal normal normal ${fontSizeId}px GriffoClassico`;
+      // @ts-ignore
+      ctx.fontVariant = 'small-caps';
+      
+      const idY = (520 + fontSizeNome + 45) - offsetUp;
+      ctx.fillText(`ID: ${ingresso.id.split('-')[0]}`, centerX, idY);
 
       // 3. Desenhar o QR Code
-      // Tamanho: 419x419, Cor: #322305, Margem superior: 720px
       const qrSize = 419;
-      const qrY = 720;
+      const qrY = 720 - offsetUp;
       const qrX = centerX - (qrSize / 2);
 
       const svgElement = document.getElementById(`qr-hidden-${ingresso.id}`) as unknown as SVGSVGElement;
@@ -124,7 +133,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
         {isGenerating && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
             <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
-            <p className="text-sm text-muted-foreground">Aplicando medidas exatas...</p>
+            <p className="text-sm text-muted-foreground">Ajustando posições...</p>
           </div>
         )}
         
