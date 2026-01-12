@@ -17,7 +17,6 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const readerRef = useRef<BrowserQRCodeReader>(new BrowserQRCodeReader());
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -58,7 +57,6 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     setError(null);
     setPhotoTaken(imageDataUrl);
 
-    // Criar um elemento de imagem temporário para o ZXing
     const img = new Image();
     img.src = imageDataUrl;
     
@@ -69,28 +67,18 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
         hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
         
         const reader = new BrowserQRCodeReader(hints);
-        
-        // O ZXing possui um método específico para decodificar de um elemento de imagem
         const result = await reader.decodeFromImageElement(img);
         
         if (result) {
           const code = result.getText();
-          console.log('[PhotoCapture] QR Code detectado:', code);
           setDecodedCode(code);
-          // Pequeno delay visual antes de fechar e validar
           setTimeout(() => onCapture(code), 800);
         }
       } catch (err) {
-        console.error('[PhotoCapture] Erro na decodificação:', err);
-        setError("Não foi possível encontrar um QR Code nesta imagem. Tente aproximar mais ou usar um print mais centralizado.");
+        setError("QR Code não encontrado. Tente aproximar mais ou usar um print centralizado.");
       } finally {
         setIsProcessing(false);
       }
-    };
-
-    img.onerror = () => {
-      setError("Erro ao carregar a imagem.");
-      setIsProcessing(false);
     };
   };
 
@@ -104,7 +92,6 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
       
       if (context && video.readyState === 4) {
         context.drawImage(video, 0, 0);
-        // Usar JPEG com alta qualidade para fotos de câmera
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
         stopCamera();
         processImage(dataUrl);
@@ -144,24 +131,26 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
 
       <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
         {photoTaken ? (
-          <div className="relative w-full h-full flex flex-col items-center justify-center p-4">
-            <div className="relative max-w-full max-h-[60vh]">
-              <img 
-                src={photoTaken} 
-                alt="Captura" 
-                className={`rounded-lg shadow-2xl object-contain transition-all ${decodedCode ? 'border-4 border-green-500 scale-[1.02]' : ''}`}
-              />
-              {isProcessing && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg">
-                  <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                    <span className="text-white font-medium">Processando...</span>
+          <div className="relative w-full h-full flex flex-col items-center justify-between p-4">
+            <div className="flex-1 flex items-center justify-center w-full min-h-0">
+              <div className="relative max-w-full max-h-full">
+                <img 
+                  src={photoTaken} 
+                  alt="Captura" 
+                  className={`rounded-lg shadow-2xl object-contain max-h-[60vh] transition-all ${decodedCode ? 'border-4 border-green-500 scale-[1.02]' : ''}`}
+                />
+                {isProcessing && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg">
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                      <span className="text-white font-medium">Processando...</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
             
-            <div className="mt-6 w-full max-w-xs space-y-4">
+            <div className="w-full max-w-xs space-y-4 pb-8 mt-4">
               {decodedCode ? (
                 <div className="bg-green-500 text-white p-4 rounded-lg text-center font-bold shadow-lg">
                   QR CODE IDENTIFICADO!
@@ -189,11 +178,11 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
           <>
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-72 h-72 border-2 border-primary/50 rounded-2xl relative">
-                <div className="absolute -top-1 -left-1 w-12 h-12 border-t-4 border-l-4 border-primary rounded-tl-2xl" />
-                <div className="absolute -top-1 -right-1 w-12 h-12 border-t-4 border-r-4 border-primary rounded-tr-2xl" />
-                <div className="absolute -bottom-1 -left-1 w-12 h-12 border-b-4 border-l-4 border-primary rounded-bl-2xl" />
-                <div className="absolute -bottom-1 -right-1 w-12 h-12 border-b-4 border-r-4 border-primary rounded-br-2xl" />
+              <div className="w-64 h-64 border-2 border-primary/50 rounded-2xl relative">
+                <div className="absolute -top-1 -left-1 w-10 h-10 border-t-4 border-l-4 border-primary rounded-tl-2xl" />
+                <div className="absolute -top-1 -right-1 w-10 h-10 border-t-4 border-r-4 border-primary rounded-tr-2xl" />
+                <div className="absolute -bottom-1 -left-1 w-10 h-10 border-b-4 border-l-4 border-primary rounded-bl-2xl" />
+                <div className="absolute -bottom-1 -right-1 w-10 h-10 border-b-4 border-r-4 border-primary rounded-br-2xl" />
               </div>
             </div>
 
