@@ -40,9 +40,12 @@ export function LoginScreen() {
             localization={{
               variables: {
                 sign_in: {
-                  email_label: 'E-mail',
+                  email_label: 'Endereço de e-mail',
                   password_label: 'Senha',
+                  email_input_placeholder: 'Seu endereço de e-mail',
+                  password_input_placeholder: 'Sua senha',
                   button_label: 'Entrar',
+                  loading_button_label: 'Entrando...',
                 },
               },
             }}
