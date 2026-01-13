@@ -25,14 +25,16 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
     setError(null);
 
     try {
+      // Garante que a fonte esteja carregada antes de desenhar
       await document.fonts.load('48px GriffoClassico');
 
       const baseImage = new Image();
-      baseImage.src = '/src/images/MOCK.png';
+      // Como está na pasta public, o caminho é direto da raiz
+      baseImage.src = '/MOCK.png'; 
       
       await new Promise((resolve, reject) => {
         baseImage.onload = resolve;
-        baseImage.onerror = () => reject(new Error('Erro ao carregar MOCK.png'));
+        baseImage.onerror = () => reject(new Error('Erro ao carregar a imagem de fundo (/MOCK.png) na pasta public'));
       });
 
       canvas.width = baseImage.width;
@@ -44,7 +46,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       const centerX = canvas.width / 2;
       const offsetUp = 100; 
 
-      // 1. Nome - Ajustado para baixo em 15px (de 520 para 535)
+      // 1. Nome
       const fontSizeNome = 48;
       ctx.fillStyle = '#5d3f04';
       ctx.textAlign = 'center';
@@ -55,7 +57,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       const nomeY = 535 - offsetUp;
       ctx.fillText(ingresso.nome_convidado, centerX, nomeY, 419);
 
-      // 2. ID - Mantido na mesma posição
+      // 2. ID
       const fontSizeId = 28;
       ctx.font = `normal normal normal ${fontSizeId}px GriffoClassico`;
       // @ts-ignore
