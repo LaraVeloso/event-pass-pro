@@ -67,18 +67,30 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
         hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
         
         const reader = new BrowserQRCodeReader(hints);
+        // Usando decodeFromImageElement que é mais estável para fotos estáticas
         const result = await reader.decodeFromImageElement(img);
         
         if (result) {
           const code = result.getText();
+          console.log("[PhotoCapture] QR Code detectado:", code);
           setDecodedCode(code);
-          setTimeout(() => onCapture(code), 800);
+          // Pequeno delay para feedback visual antes de fechar
+          setTimeout(() => {
+            onCapture(code);
+          }, 800);
+        } else {
+          throw new Error("Não foi possível ler o código.");
         }
       } catch (err) {
-        setError("QR Code não encontrado. Tente aproximar mais ou usar um print centralizado.");
-      } finally {
+        console.error("[PhotoCapture] Erro na decodificação:", err);
+        setError("QR Code não identificado. Tente enquadrar melhor ou aumentar o brilho.");
         setIsProcessing(false);
       }
+    };
+
+    img.onerror = () => {
+      setError("Erro ao carregar a imagem capturada.");
+      setIsProcessing(false);
     };
   };
 
@@ -86,12 +98,14 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
     if (videoRef.current) {
       const video = videoRef.current;
       const canvas = document.createElement('canvas');
+      
+      // Captura na resolução nativa do vídeo para melhor precisão
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      const context = canvas.getContext('2d');
       
-      if (context && video.readyState === 4) {
-        context.drawImage(video, 0, 0);
+      const context = canvas.getContext('2d');
+      if (context && video.readyState >= 2) {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
         stopCamera();
         processImage(dataUrl);
@@ -139,7 +153,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
                   alt="Captura" 
                   className={`rounded-lg shadow-2xl object-contain max-h-[60vh] transition-all ${decodedCode ? 'border-4 border-green-500 scale-[1.02]' : ''}`}
                 />
-                {isProcessing && (
+                {isProcessing && !decodedCode && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-lg">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="w-10 h-10 text-primary animate-spin" />
@@ -152,7 +166,7 @@ export function PhotoCapture({ onCapture, onClose }: PhotoCaptureProps) {
             
             <div className="w-full max-w-xs space-y-4 pb-8 mt-4">
               {decodedCode ? (
-                <div className="bg-green-500 text-white p-4 rounded-lg text-center font-bold shadow-lg">
+                <div className="bg-green-500 text-white p-4 rounded-lg text-center font-bold shadow-lg animate-in zoom-in duration-300">
                   QR CODE IDENTIFICADO!
                 </div>
               ) : !isProcessing && error && (
