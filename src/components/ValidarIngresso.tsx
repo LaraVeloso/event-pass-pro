@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PhotoCapture } from '@/components/PhotoCapture';
+import { QRScanner } from '@/components/QRScanner';
 import { ResultadoValidacao } from '@/components/ResultadoValidacao';
 import { ListaConvidados } from '@/components/ListaConvidados';
 import { Camera, Search, Loader2, Users } from 'lucide-react';
@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export function ValidarIngresso() {
   const [codigoManual, setCodigoManual] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showPhotoCapture, setShowPhotoCapture] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [resultado, setResultado] = useState<ResultadoType | null>(null);
   const { validarIngresso } = useIngressos();
   const { toast } = useToast();
@@ -30,7 +30,7 @@ export function ValidarIngresso() {
     }
 
     setIsLoading(true);
-    setShowPhotoCapture(false);
+    setShowScanner(false);
 
     try {
       const result = await validarIngresso(codigo.trim());
@@ -52,7 +52,9 @@ export function ValidarIngresso() {
     handleValidar(codigoManual);
   };
 
-  const handleCodeCaptured = (code: string) => {
+  const handleScanResult = (code: string) => {
+    console.log("[ValidarIngresso] Código recebido do scanner:", code);
+    setShowScanner(false);
     handleValidar(code);
   };
 
@@ -70,8 +72,11 @@ export function ValidarIngresso() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-lg">
-      {showPhotoCapture && (
-        <PhotoCapture onCapture={handleCodeCaptured} onClose={() => setShowPhotoCapture(false)} />
+      {showScanner && (
+        <QRScanner 
+          onScan={handleScanResult} 
+          onClose={() => setShowScanner(false)} 
+        />
       )}
 
       <Tabs defaultValue="scanner" className="w-full">
@@ -97,7 +102,7 @@ export function ValidarIngresso() {
             </CardHeader>
             <CardContent className="space-y-6">
               <Button
-                onClick={() => setShowPhotoCapture(true)}
+                onClick={() => setShowScanner(true)}
                 className="w-full h-24 text-lg flex flex-col gap-2"
                 size="lg"
                 disabled={isLoading}

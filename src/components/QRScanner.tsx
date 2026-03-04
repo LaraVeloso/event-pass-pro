@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import QrScanner from 'react-qr-scanner';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, Camera, Loader2 } from 'lucide-react';
+import { BrowserQRCodeReader } from '@zxing/library';
 
 interface QRScannerProps {
   onScan: (code: string) => void;
@@ -10,39 +10,80 @@ interface QRScannerProps {
 
 export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [error, setError] = useState<string | null>(null);
-  const [cameraActive, setCameraActive] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const readerRef = useRef<BrowserQRCodeReader | null>(null);
+  const controlsRef = useRef<any>(null);
 
-  const handleScan = (result: any) => {
-    if (result?.text) {
-      console.log("QR Code detected:", result.text);
-      onScan(result.text);
-      setCameraActive(false);
-    }
-  };
+  useEffect(() => {
+    const startScanner = async () => {
+      try {
+        readerRef.current = new BrowserQRCodeReader();
+        
+        const videoInputDevices = await BrowserQRCodeReader.listVideoInputDevices();
+        
+        if (videoInputDevices.length === 0) {
+          setError('Nenhuma câmera encontrada.');
+          setIsLoading(false);
+          return;
+        }
 
-  const handleError = (error: any) => {
-    console.error('QR Scanner error:', error);
-    if (error?.name === 'NotAllowedError') {
-      setError('Permissão da câmera negada. Por favor, permita o acesso à câmera nas configurações do navegador.');
-    } else if (error?.name === 'NotFoundError') {
-      setError('Nenhuma câmera encontrada. Verifique se seu dispositivo tem uma câmera.');
-    } else if (error?.name === 'NotSupportedError') {
-      setError('Câmera não suportada. Tente usar um navegador diferente.');
-    } else {
-      setError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
-    }
-  };
+        // Prefere câmera traseira
+        const backCamera = videoInputDevices.find(device => 
+          device.label.toLowerCase().includes('back') || 
+          device.label.toLowerCase().includes('traseira') ||
+          device.label.toLowerCase().includes('environment')
+        );
+        
+        const selectedDeviceId = backCamera?.deviceId || videoInputDevices[0].deviceId;
+
+        if (videoRef.current && readerRef.current) {
+          controlsRef.current = await readerRef.current.decodeFromVideoDevice(
+            selectedDeviceId,
+            videoRef.current,
+            (result, err) => {
+              if (result) {
+                const code = result.getText();
+                console.log("[QRScanner] QR Code detectado:", code);
+                onScan(code);
+              }
+              // Ignora erros de "not found" que são normais durante o scan
+              if (err && !(err.name === 'NotFoundException')) {
+                console.error("[QRScanner] Erro:", err);
+              }
+            }
+          );
+          setIsLoading(false);
+        }
+      } catch (err: any) {
+        console.error('[QRScanner] Erro ao iniciar:', err);
+        if (err?.name === 'NotAllowedError') {
+          setError('Permissão da câmera negada. Por favor, permita o acesso à câmera.');
+        } else if (err?.name === 'NotFoundError') {
+          setError('Nenhuma câmera encontrada.');
+        } else {
+          setError('Não foi possível acessar a câmera.');
+        }
+        setIsLoading(false);
+      }
+    };
+
+    startScanner();
+
+    return () => {
+      if (controlsRef.current) {
+        controlsRef.current.stop();
+      }
+      if (readerRef.current) {
+        readerRef.current.reset();
+      }
+    };
+  }, [onScan]);
 
   const handleRetry = () => {
     setError(null);
-    setCameraActive(true);
-  };
-
-  const constraints = {
-    facingMode: 'environment',
-    aspectRatio: 1,
-    width: { ideal: 1280 },
-    height: { ideal: 720 }
+    setIsLoading(true);
+    window.location.reload();
   };
 
   return (
@@ -73,57 +114,29 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
           </div>
         ) : (
           <>
-            <div className="w-full h-full">
-              {cameraActive && (
-                <div className="relative w-full h-full">
-                  <QrScanner
-                    onResult={handleScan}
-                    onError={handleError}
-                    constraints={constraints}
-                    style={{ 
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover'
-                    }}
-                    videoStyle={{ 
-                      objectFit: 'cover',
-                      width: '100%',
-                      height: '100%'
-                    }}
-                    videoConstraints={{
-                      facingMode: 'environment',
-                      aspectRatio: 1,
-                      width: { ideal: 1280 },
-                      height: { ideal: 720 }
-                    }}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="relative w-64 h-64">
-                      <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-primary rounded-tl-lg" />
-                      <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-primary rounded-tr-lg" />
-                      <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-primary rounded-bl-lg" />
-                      <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-primary rounded-br-lg" />
-                      <div className="absolute left-0 right-0 h-0.5 bg-primary/50 animate-pulse top-1/2" />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {!cameraActive && (
+            {isLoading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-30">
-                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mb-4">
-                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <p className="text-white text-lg mb-4">QR Code detectado!</p>
-                <p className="text-white/60 text-sm">Processando...</p>
+                <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+                <p className="text-white">Iniciando câmera...</p>
               </div>
             )}
+            
+            <video 
+              ref={videoRef} 
+              className="w-full h-full object-cover"
+              playsInline
+              muted
+            />
+            
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="relative w-64 h-64">
+                <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-primary rounded-tl-lg" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-primary rounded-tr-lg" />
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-primary rounded-bl-lg" />
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-primary rounded-br-lg" />
+                <div className="absolute left-0 right-0 h-0.5 bg-primary/50 animate-pulse top-1/2" />
+              </div>
+            </div>
           </>
         )}
       </div>
