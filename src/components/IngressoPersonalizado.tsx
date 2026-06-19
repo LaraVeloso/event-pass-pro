@@ -25,11 +25,11 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
     setError(null);
 
     try {
-      // Garante que a fonte esteja carregada antes de desenhar
+      
       await document.fonts.load('48px GriffoClassico');
 
       const baseImage = new Image();
-      // Como está na pasta public, o caminho é direto da raiz
+      
       baseImage.src = '/MOCK.jpeg'; 
       
       await new Promise((resolve, reject) => {
@@ -57,9 +57,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       const nomeY = 535 - offsetUp;
       ctx.fillText(ingresso.nome_convidado, centerX, nomeY, 419);
 
-      // 2. ID — usa os 8 primeiros caracteres do qr_code (UUID) como
-      // identificador curto exibido no ingresso, em vez do id numérico
-      // sequencial do banco (mais discreto e não-adivinhável).
+   
       const fontSizeId = 28;
       ctx.font = `normal normal normal ${fontSizeId}px GriffoClassico`;
       // @ts-ignore
