@@ -1,7 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import {
+  fetchConvidados,
+  criarConvidado,
+  registrarEntrada,
+  buscarConvidadoPorCodigo,
+  type ApiGuest,
+  type CreateGuestInput,
+} from '@/lib/api';
 import { useAuth } from './AuthContext';
 
+// Mantemos o nome "Ingresso" e os mesmos campos que o resto do app já usa
+// (IngressoCard, IngressoPersonalizado, ListaConvidados) para não precisar
+// alterar nenhum desses componentes além do necessário.
 export interface Ingresso {
   id: string;
   nome_convidado: string;
@@ -24,25 +34,38 @@ export interface ResultadoValidacao {
 interface IngressoContextType {
   ingressos: Ingresso[];
   criarIngresso: (nomeConvidado: string) => Promise<Ingresso | null>;
-  validarIngresso: (id: string) => Promise<ResultadoValidacao>;
-  buscarIngresso: (id: string) => Promise<Ingresso | null>;
+  validarIngresso: (codigo: string) => Promise<ResultadoValidacao>;
+  buscarIngresso: (codigo: string) => Promise<Ingresso | null>;
   refreshIngressos: () => Promise<void>;
 }
 
 const IngressoContext = createContext<IngressoContextType | undefined>(undefined);
+
+// Converte o formato da API Go (ApiGuest) para o formato "Ingresso" que o
+// resto do app já conhece, mantendo os componentes existentes intactos.
+function guestToIngresso(guest: ApiGuest): Ingresso {
+  return {
+    id: String(guest.ID),
+    nome_convidado: guest.nome,
+    qr_code: guest.qr_code,
+    entrada_registrada: guest.entrada_registrada,
+    data_criacao: guest.CreatedAt,
+    data_entrada: guest.data_entrada,
+    usuario_validador: guest.usuario_validador !== null ? String(guest.usuario_validador) : null,
+    criado_por: guest.user_id !== null ? String(guest.user_id) : null,
+  };
+}
 
 export function IngressoProvider({ children }: { children: ReactNode }) {
   const [ingressos, setIngressos] = useState<Ingresso[]>([]);
   const { user } = useAuth();
 
   const refreshIngressos = async () => {
-    const { data, error } = await supabase
-      .from('ingressos')
-      .select('*')
-      .order('data_criacao', { ascending: false });
-
-    if (!error && data) {
-      setIngressos(data as Ingresso[]);
+    try {
+      const guests = await fetchConvidados();
+      setIngressos(guests.map(guestToIngresso));
+    } catch (err) {
+      console.error('[IngressoContext] Erro ao buscar convidados:', err);
     }
   };
 
@@ -55,81 +78,46 @@ export function IngressoProvider({ children }: { children: ReactNode }) {
       throw new Error('Apenas administradores podem criar ingressos.');
     }
 
-    const id = crypto.randomUUID();
-    const novoIngresso = {
-      nome_convidado: nomeConvidado,
-      qr_code: id,
-      criado_por: user.id, // Salva quem criou
-    };
+    const input: CreateGuestInput = { nome: nomeConvidado };
+    const guest = await criarConvidado(input);
 
-    const { data, error } = await supabase
-      .from('ingressos')
-      .insert([novoIngresso])
-      .select()
-      .single();
-
-    if (error) throw error;
-    
     await refreshIngressos();
-    return data as Ingresso;
+    return guestToIngresso(guest);
   };
 
+  // Aceita tanto o qr_code (UUID) quanto o id numérico, igual ao fluxo anterior.
   const validarIngresso = async (codigo: string): Promise<ResultadoValidacao> => {
-    // Busca por ID ou QR Code
-    const { data: ingresso, error } = await supabase
-      .from('ingressos')
-      .select('*')
-      .or(`id.eq.${codigo},qr_code.eq.${codigo}`)
-      .maybeSingle();
+    const resultado = await registrarEntrada(codigo);
 
-    if (error || !ingresso) {
+    if (resultado.status === 'invalido') {
       return {
         status: 'invalido',
-        mensagem: 'Ingresso não encontrado no sistema.',
+        mensagem: resultado.mensagem || 'Ingresso não encontrado no sistema.',
       };
     }
-
-    if (ingresso.entrada_registrada) {
-      return {
-        status: 'duplicado',
-        ingresso: ingresso as Ingresso,
-        mensagem: `Entrada já registrada em ${new Date(ingresso.data_entrada!).toLocaleString('pt-BR')}`,
-      };
-    }
-
-    const { data: updated, error: updateError } = await supabase
-      .from('ingressos')
-      .update({
-        entrada_registrada: true,
-        data_entrada: new Date().toISOString(),
-        usuario_validador: user?.id, // Salva quem validou
-      })
-      .eq('id', ingresso.id)
-      .select()
-      .single();
-
-    if (updateError) throw updateError;
 
     await refreshIngressos();
 
     return {
-      status: 'valido',
-      ingresso: updated as Ingresso,
-      mensagem: 'Entrada autorizada com sucesso!',
+      status: resultado.status,
+      ingresso: resultado.data ? guestToIngresso(resultado.data) : undefined,
+      mensagem: resultado.mensagem,
     };
   };
 
-  const buscarIngresso = async (id: string): Promise<Ingresso | null> => {
-    const { data } = await supabase
-      .from('ingressos')
-      .select('*')
-      .or(`id.eq.${id},qr_code.eq.${id}`)
-      .maybeSingle();
-    return data as Ingresso;
+  const buscarIngresso = async (codigo: string): Promise<Ingresso | null> => {
+    try {
+      const guest = await buscarConvidadoPorCodigo(codigo);
+      return guestToIngresso(guest);
+    } catch {
+      return null;
+    }
   };
 
   return (
-    <IngressoContext.Provider value={{ ingressos, criarIngresso, validarIngresso, buscarIngresso, refreshIngressos }}>
+    <IngressoContext.Provider
+      value={{ ingressos, criarIngresso, validarIngresso, buscarIngresso, refreshIngressos }}
+    >
       {children}
     </IngressoContext.Provider>
   );

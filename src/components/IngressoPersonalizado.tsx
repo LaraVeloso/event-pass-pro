@@ -30,11 +30,11 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
 
       const baseImage = new Image();
       // Como está na pasta public, o caminho é direto da raiz
-      baseImage.src = '/MOCK.png'; 
+      baseImage.src = '/MOCK.jpeg'; 
       
       await new Promise((resolve, reject) => {
         baseImage.onload = resolve;
-        baseImage.onerror = () => reject(new Error('Erro ao carregar a imagem de fundo (/MOCK.png) na pasta public'));
+        baseImage.onerror = () => reject(new Error('Erro ao carregar a imagem de fundo (/MOCK.jpeg) na pasta public'));
       });
 
       canvas.width = baseImage.width;
@@ -57,13 +57,15 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       const nomeY = 535 - offsetUp;
       ctx.fillText(ingresso.nome_convidado, centerX, nomeY, 419);
 
-      // 2. ID
+      // 2. ID — usa os 8 primeiros caracteres do qr_code (UUID) como
+      // identificador curto exibido no ingresso, em vez do id numérico
+      // sequencial do banco (mais discreto e não-adivinhável).
       const fontSizeId = 28;
       ctx.font = `normal normal normal ${fontSizeId}px GriffoClassico`;
       // @ts-ignore
       ctx.fontVariant = 'small-caps';
       const idY = (520 + fontSizeNome + 45) - offsetUp;
-      ctx.fillText(`ID: ${ingresso.id.split('-')[0]}`, centerX, idY);
+      ctx.fillText(`ID: ${ingresso.qr_code.split('-')[0]}`, centerX, idY);
 
       // 3. QR Code
       const qrSize = 377;
@@ -123,7 +125,7 @@ export function IngressoPersonalizado({ ingresso }: IngressoPersonalizadoProps) 
       <div className="hidden">
         <QRCodeSVG
           id={`qr-hidden-${ingresso.id}`}
-          value={ingresso.id}
+          value={ingresso.qr_code}
           size={377}
           level="H"
           fgColor="#322305"

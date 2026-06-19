@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, Camera, Loader2 } from 'lucide-react';
-import { BrowserQRCodeReader } from '@zxing/library';
+import { BrowserQRCodeReader, BrowserCodeReader, IScannerControls } from '@zxing/browser';
 
 interface QRScannerProps {
   onScan: (code: string) => void;
@@ -13,22 +13,21 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserQRCodeReader | null>(null);
-  const controlsRef = useRef<any>(null);
+  const controlsRef = useRef<IScannerControls | null>(null);
 
   useEffect(() => {
     const startScanner = async () => {
       try {
         readerRef.current = new BrowserQRCodeReader();
-        
-        const videoInputDevices = await BrowserQRCodeReader.listVideoInputDevices();
-        
+
+        const videoInputDevices = await BrowserCodeReader.listVideoInputDevices();
+
         if (videoInputDevices.length === 0) {
           setError('Nenhuma câmera encontrada.');
           setIsLoading(false);
           return;
         }
 
-        // Prefere câmera traseira
         const backCamera = videoInputDevices.find(device => 
           device.label.toLowerCase().includes('back') || 
           device.label.toLowerCase().includes('traseira') ||
@@ -47,8 +46,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
                 console.log("[QRScanner] QR Code detectado:", code);
                 onScan(code);
               }
-              // Ignora erros de "not found" que são normais durante o scan
-              if (err && !(err.name === 'NotFoundException')) {
+              if (err && err.name !== 'NotFoundException') {
                 console.error("[QRScanner] Erro:", err);
               }
             }
@@ -71,12 +69,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
     startScanner();
 
     return () => {
-      if (controlsRef.current) {
-        controlsRef.current.stop();
-      }
-      if (readerRef.current) {
-        readerRef.current.reset();
-      }
+      controlsRef.current?.stop();
     };
   }, [onScan]);
 

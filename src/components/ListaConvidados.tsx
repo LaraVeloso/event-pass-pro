@@ -5,8 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, UserCheck, CheckCircle2, Clock, User, QrCode, Download, X } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { Search, UserCheck, CheckCircle2, Clock, User, QrCode } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -15,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { IngressoPersonalizado } from './IngressoPersonalizado';
 
 export function ListaConvidados() {
   const { ingressos, validarIngresso } = useIngressos();
@@ -34,34 +34,12 @@ export function ListaConvidados() {
     if (!selecionado) return;
     setIsConfirmando(true);
     try {
-      await validarIngresso(selecionado.id);
+   
+      await validarIngresso(selecionado.qr_code);
       setSelecionado(null);
     } finally {
       setIsConfirmando(false);
     }
-  };
-
-  const handleDownloadQR = (ingresso: Ingresso) => {
-    const svg = document.getElementById(`qr-list-${ingresso.id}`);
-    if (!svg) return;
-
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    const img = new Image();
-    
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx?.drawImage(img, 0, 0);
-      const pngFile = canvas.toDataURL("image/png");
-      const downloadLink = document.createElement("a");
-      downloadLink.download = `QR_${ingresso.nome_convidado}.png`;
-      downloadLink.href = pngFile;
-      downloadLink.click();
-    };
-
-    img.src = "data:image/svg+xml;base64," + btoa(svgData);
   };
 
   return (
@@ -106,7 +84,7 @@ export function ListaConvidados() {
                       variant="ghost" 
                       className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
                       onClick={() => setVerQRCode(ingresso)}
-                      title="Ver QR Code"
+                      title="Ver Ingresso / QR Code"
                     >
                       <QrCode className="w-4 h-4" />
                     </Button>
@@ -136,7 +114,6 @@ export function ListaConvidados() {
         </div>
       </ScrollArea>
 
-      {/* Modal de Confirmação de Presença */}
       <Dialog open={!!selecionado} onOpenChange={(open) => !open && setSelecionado(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -153,7 +130,7 @@ export function ListaConvidados() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-lg truncate">{selecionado.nome_convidado}</p>
-                <p className="text-xs text-muted-foreground font-mono">ID: {selecionado.id.split('-')[0]}...</p>
+                <p className="text-xs text-muted-foreground font-mono">ID: {selecionado.qr_code.split('-')[0]}...</p>
               </div>
             </div>
           )}
@@ -169,33 +146,18 @@ export function ListaConvidados() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Visualização de QR Code (Admin) */}
       <Dialog open={!!verQRCode} onOpenChange={(open) => !open && setVerQRCode(null)}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>QR Code do Ingresso</DialogTitle>
+            <DialogTitle>Ingresso do Convidado</DialogTitle>
             <DialogDescription>
               {verQRCode?.nome_convidado}
             </DialogDescription>
           </DialogHeader>
           
           {verQRCode && (
-            <div className="flex flex-col items-center justify-center p-6 space-y-6">
-              <div className="bg-white p-4 rounded-xl shadow-sm border border-border">
-                <QRCodeSVG
-                  id={`qr-list-${verQRCode.id}`}
-                  value={verQRCode.id}
-                  size={200}
-                  level="H"
-                />
-              </div>
-              <Button 
-                className="w-full" 
-                onClick={() => handleDownloadQR(verQRCode)}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Baixar QR Code
-              </Button>
+            <div className="flex flex-col items-center justify-center py-2">
+              <IngressoPersonalizado ingresso={verQRCode} />
             </div>
           )}
         </DialogContent>

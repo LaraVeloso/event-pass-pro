@@ -1,71 +1,59 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { User as SupabaseUser } from '@supabase/supabase-js';
-
-export type UserType = 'admin' | 'seguranca';
+import { getToken, setToken as persistToken, clearToken, me, login as apiLogin, ApiError } from '@/lib/api';
+import type { UserRole } from '@/lib/api';
 
 export interface User {
-  id: string;
-  usuario: string;
-  tipo: UserType;
+  id: number;
+  tipo: UserRole; // 'client' | 'admin'
 }
 
 interface AuthContextType {
   user: User | null;
-  supabaseUser: SupabaseUser | null;
-  logout: () => Promise<void>;
   isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const getProfile = async (sessionUser: SupabaseUser) => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, usuario, tipo')
-        .eq('id', sessionUser.id)
-        .single();
-
-      if (!error && data) {
-        setUser(data as User);
-      }
+  const loadProfile = async () => {
+    try {
+      const profile = await me();
+      setUser({ id: profile.user_id, tipo: profile.role });
+    } catch (err) {
+      // Token ausente, inválido ou expirado: garante estado limpo.
+      clearToken();
+      setUser(null);
+    } finally {
       setIsLoading(false);
-    };
+    }
+  };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSupabaseUser(session?.user ?? null);
-      if (session?.user) {
-        getProfile(session.user);
-      } else {
-        setIsLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSupabaseUser(session?.user ?? null);
-      if (session?.user) {
-        getProfile(session.user);
-      } else {
-        setUser(null);
-        setIsLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+  useEffect(() => {
+    if (getToken()) {
+      loadProfile();
+    } else {
+      setIsLoading(false);
+    }
   }, []);
 
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const login = async (email: string, password: string) => {
+    const { token } = await apiLogin(email, password);
+    persistToken(token);
+    await loadProfile();
+  };
+
+  const logout = () => {
+    clearToken();
+    setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, supabaseUser, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
