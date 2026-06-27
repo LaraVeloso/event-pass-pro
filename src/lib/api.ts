@@ -2,9 +2,6 @@ const API_BASE_URL = 'https://api-eventos.artonbyte.com.br';
 
 const TOKEN_STORAGE_KEY = 'api_eventos_token';
 
-// ---------------------------------------------------------------------------
-// Token (JWT) — guardado em localStorage, lido por todo request autenticado
-// ---------------------------------------------------------------------------
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_STORAGE_KEY);
 }
@@ -17,9 +14,6 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
-// ---------------------------------------------------------------------------
-// Erro customizado para diferenciar erros de API de erros de rede
-// ---------------------------------------------------------------------------
 export class ApiError extends Error {
   status: number;
   payload: any;
@@ -32,13 +26,10 @@ export class ApiError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Wrapper genérico de fetch
-// ---------------------------------------------------------------------------
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
-  auth?: boolean; // default: true
+  auth?: boolean; 
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -61,7 +52,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  // Corpo pode vir vazio, então protegemos o parse.
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
 
@@ -73,12 +63,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return data as T;
 }
 
-// ---------------------------------------------------------------------------
-// Tipos — espelham EXATAMENTE o JSON retornado pela API Go.
-// gorm.Model não tem tag `json` customizada nesta versão, então os campos
-// de auditoria saem com a grafia Go original: ID, CreatedAt, UpdatedAt.
-// (confirmado no log de teste real do endpoint de Presentes)
-// ---------------------------------------------------------------------------
 export interface ApiGuest {
   ID: number;
   CreatedAt: string;

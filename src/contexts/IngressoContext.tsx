@@ -9,9 +9,6 @@ import {
 } from '@/lib/api';
 import { useAuth } from './AuthContext';
 
-// Mantemos o nome "Ingresso" e os mesmos campos que o resto do app já usa
-// (IngressoCard, IngressoPersonalizado, ListaConvidados) para não precisar
-// alterar nenhum desses componentes além do necessário.
 export interface Ingresso {
   id: string;
   nome_convidado: string;
@@ -41,8 +38,6 @@ interface IngressoContextType {
 
 const IngressoContext = createContext<IngressoContextType | undefined>(undefined);
 
-// Converte o formato da API Go (ApiGuest) para o formato "Ingresso" que o
-// resto do app já conhece, mantendo os componentes existentes intactos.
 function guestToIngresso(guest: ApiGuest): Ingresso {
   return {
     id: String(guest.ID),
@@ -85,7 +80,6 @@ export function IngressoProvider({ children }: { children: ReactNode }) {
     return guestToIngresso(guest);
   };
 
-  // Aceita tanto o qr_code (UUID) quanto o id numérico, igual ao fluxo anterior.
   const validarIngresso = async (codigo: string): Promise<ResultadoValidacao> => {
     const resultado = await registrarEntrada(codigo);
 

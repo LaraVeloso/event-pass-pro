@@ -4,7 +4,7 @@ import type { UserRole } from '@/lib/api';
 
 export interface User {
   id: number;
-  tipo: UserRole; // 'client' | 'admin'
+  tipo: UserRole;
 }
 
 interface AuthContextType {
