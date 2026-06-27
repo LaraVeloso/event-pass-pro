@@ -104,9 +104,6 @@ export interface CheckinResponse {
 
 export type UserRole = 'client' | 'admin';
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
 export async function login(email: string, password: string): Promise<{ token: string }> {
   return request('/api/login', {
     method: 'POST',
