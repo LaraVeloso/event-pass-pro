@@ -22,11 +22,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = async () => {
     try {
-      const profile = await me();
+      const profile = await me(); 
       setUser({ id: profile.user_id, tipo: profile.role });
     } catch (err) {
-      // Token ausente, inválido ou expirado: garante estado limpo.
-      clearToken();
+      clearToken(); 
       setUser(null);
     } finally {
       setIsLoading(false);
